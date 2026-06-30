@@ -53,45 +53,34 @@ Future<List<_PlaceSuggestion>> _autocomplete(String input) async {
   return completer.future;
 }
 
-// ── Coordenadas via PlacesService.getDetails() — ya incluido en library=places.
-// No requiere Geocoding API separada.
+// ── Coordenadas via google.maps.places.Place (nueva API, parte de library=places).
+// Usa Places API backend — no requiere Geocoding API separada.
 Future<LatLng?> _resolveCoords(String placeId) async {
-  final completer = Completer<LatLng?>();
   try {
-    final google  = js_util.getProperty(html.window, 'google');
-    final maps    = js_util.getProperty(google, 'maps');
-    final places  = js_util.getProperty(maps, 'places');
+    final google = js_util.getProperty(html.window, 'google');
+    final maps   = js_util.getProperty(google, 'maps');
+    final places = js_util.getProperty(maps, 'places');
 
-    // PlacesService necesita un elemento DOM (div vacío sirve).
-    final doc = js_util.getProperty(html.window, 'document');
-    final div = js_util.callMethod(doc, 'createElement', ['div']);
-    final service = js_util.callConstructor(
-      js_util.getProperty(places, 'PlacesService') as Object,
-      [div],
+    // new google.maps.places.Place({id: placeId})
+    final place = js_util.callConstructor(
+      js_util.getProperty(places, 'Place') as Object,
+      [js_util.jsify({'id': placeId})],
     );
 
-    js_util.callMethod(service, 'getDetails', [
-      js_util.jsify({'placeId': placeId, 'fields': ['geometry']}),
-      js_util.allowInterop((result, status) {
-        if (js_util.dartify(status) != 'OK') {
-          completer.complete(null);
-          return;
-        }
-        try {
-          final geometry = js_util.getProperty(result, 'geometry');
-          final location = js_util.getProperty(geometry, 'location');
-          final lat = (js_util.callMethod(location, 'lat', []) as num).toDouble();
-          final lng = (js_util.callMethod(location, 'lng', []) as num).toDouble();
-          completer.complete(LatLng(lat, lng));
-        } catch (_) {
-          completer.complete(null);
-        }
-      }),
-    ]);
+    // await place.fetchFields({fields: ['location']})
+    final fetchPromise = js_util.callMethod(
+      place, 'fetchFields', [js_util.jsify({'fields': ['location']})],
+    );
+    await js_util.promiseToFuture<Object>(fetchPromise as Object);
+
+    final location = js_util.getProperty(place, 'location');
+    if (location == null) return null;
+    final lat = (js_util.callMethod(location, 'lat', []) as num).toDouble();
+    final lng = (js_util.callMethod(location, 'lng', []) as num).toDouble();
+    return LatLng(lat, lng);
   } catch (_) {
-    completer.complete(null);
+    return null;
   }
-  return completer.future;
 }
 
 class _PlaceSuggestion {
