@@ -4,10 +4,12 @@
 const { initializeApp } = require('firebase-admin/app');
 initializeApp();
 
-const { completarOnboardingFretix } = require('./src/onboarding');
-const { cotizarViajeFretix }        = require('./src/cotizacion');
+const { completarOnboardingFretix }  = require('./src/onboarding');
+const { cotizarViajeFretix }         = require('./src/cotizacion');
+const { confirmarViajeFretix }       = require('./src/confirmar_viaje');
 
 module.exports = {
   completarOnboardingFretix,
   cotizarViajeFretix,
+  confirmarViajeFretix,
 };

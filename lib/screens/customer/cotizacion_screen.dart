@@ -297,17 +297,21 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
     ));
   }
 
-  // ── [CONFIRMAR VIAJE] Escribe /viajes/{id} en Firestore y navega al tracking.
+  // ── [CONFIRMAR VIAJE] Llama a confirmarViajeFretix (Cloud Function) que
+  // escribe /viajes/{id} desde el servidor. Evita el WebChannel de Firestore,
+  // incompatible con el tunnel HTTPS de Codespaces.
   Future<void> _confirmarViaje() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _cotizacionActual == null) return;
 
     setState(() => _isConfirming = true);
     try {
-      await FirebaseFirestore.instance.collection('viajes').add({
-        'clienteUid':    user.uid,
+      final callable = FretixAuthService.instance.getCallable(
+        'confirmarViajeFretix',
+        timeout: const Duration(seconds: 20),
+      );
+      await callable.call({
         'clientType':    'particular',
-        'estado':        'pending',
         'pricingMethod': _cotizacionActual!['mapsFuente'] ?? 'haversine_contingencia',
         'categoria':     _selectedCategory,
         'ayudante':      _hasHelper,
@@ -326,7 +330,6 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
           'distanciaKm': _cotizacionActual!['distanciaKm'],
           'duracionMin': _cotizacionActual!['duracionMin'],
         },
-        'creadoEn': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
