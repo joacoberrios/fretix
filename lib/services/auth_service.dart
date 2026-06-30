@@ -34,16 +34,6 @@ class FretixAuthService {
   // como Mixed Content desde la página HTTPS de Codespaces. Usamos httpsCallableFromUrl
   // con la URL HTTPS completa del túnel para evitar el bloqueo.
   HttpsCallable getCallable(String name, {Duration timeout = const Duration(seconds: 15)}) {
-    const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
-    if (useEmulator && kIsWeb) {
-      const projectId = 'fretix-dev-jb';
-      const region    = 'us-central1';
-      const tunnelUrl = 'https://redesigned-cod-57x7rq7w9gg37x6g-5001.app.github.dev';
-      return FirebaseFunctions.instance.httpsCallableFromUrl(
-        '$tunnelUrl/$projectId/$region/$name',
-        options: HttpsCallableOptions(timeout: timeout),
-      );
-    }
     return _functions.httpsCallable(
       name,
       options: HttpsCallableOptions(timeout: timeout),
@@ -71,15 +61,11 @@ class FretixAuthService {
     // (el SDK de Auth usa un mecanismo interno que evita el bloqueo Mixed Content).
     final authHost = kIsWeb ? 'localhost' : _androidHost();
 
-    // El emulador de Functions en HTTPS Codespaces NO puede ser localhost:5001
-    // porque el browser bloquea peticiones HTTP desde una página HTTPS (Mixed Content).
-    // Solución: apuntar al túnel seguro que Codespaces expone para el puerto 5001.
-    // useFunctionsEmulator espera solo el host — el SDK agrega el protocolo y el puerto.
-    // TODO(devops): mover este host a una dart-define (FUNCTIONS_EMULATOR_HOST)
-    // para no hardcodearlo cuando cambie el Codespace.
-    const functionsHostWeb = 'redesigned-cod-57x7rq7w9gg37x6g-5001.app.github.dev';
-    final functionsHost    = kIsWeb ? functionsHostWeb : _androidHost();
-    const functionsPort    = kIsWeb ? 443 : 5001;
+    // En web+Codespaces, dev-server.js proxea /fretix-dev-jb/... al puerto 5001
+    // en el mismo origen → sin CORS ni Mixed Content.
+    // En Android usamos 10.0.2.2:5001 directamente.
+    final functionsHost = kIsWeb ? 'localhost' : _androidHost();
+    const functionsPort = kIsWeb ? 3000 : 5001;
 
     try {
       await _auth.useAuthEmulator(authHost, authPort);
@@ -93,13 +79,11 @@ class FretixAuthService {
       _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
       _functions.useFunctionsEmulator(functionsHost, functionsPort);
 
-      // Firestore emulator: en web+Codespaces usamos el CORS proxy (puerto 8283)
-      // que reenvía a localhost:8282 y agrega los headers CORS necesarios.
-      // El emulador en sí no agrega CORS, por lo que el proxy es obligatorio.
+      // Firestore emulator: en web+Codespaces dev-server.js proxea
+      // /google.firestore.v1.Firestore/... al puerto 8282 en el mismo origen.
+      // Sin CORS. En Android apuntamos directo al emulador.
       const firestorePort = 8282;
-      const firestoreProxyPortWeb = 8283;
-      const firestoreTunnelWeb = 'redesigned-cod-57x7rq7w9gg37x6g-$firestoreProxyPortWeb.app.github.dev';
-      final firestoreHost = kIsWeb ? firestoreTunnelWeb : '${_androidHost()}:$firestorePort';
+      final firestoreHost = kIsWeb ? 'localhost:3000' : '${_androidHost()}:$firestorePort';
       FirebaseFirestore.instance.settings = Settings(
         host: firestoreHost,
         sslEnabled: kIsWeb,
