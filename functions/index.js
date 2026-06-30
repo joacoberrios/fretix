@@ -5,7 +5,9 @@ const { initializeApp } = require('firebase-admin/app');
 initializeApp();
 
 const { completarOnboardingFretix } = require('./src/onboarding');
+const { cotizarViajeFretix }        = require('./src/cotizacion');
 
 module.exports = {
   completarOnboardingFretix,
+  cotizarViajeFretix,
 };

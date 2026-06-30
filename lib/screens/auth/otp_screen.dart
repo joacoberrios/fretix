@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -188,13 +189,24 @@ class _OtpScreenState extends State<OtpScreen>
           (_) => false,
         );
       } else {
-        // Ya onboardeado: leer rol desde Firestore y navegar.
-        // Por ahora navegar a home genérico; el HomeRouter lo resuelve.
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRouter.home,
-          (_) => false,
-        );
+        // Usuario existente: leer rol desde Firestore para navegar al home correcto.
+        String targetRoute = AppRouter.roleSelection;
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(credential.user!.uid)
+              .get();
+          final role = doc.data()?['role'] as String?;
+          if (role == 'chofer') {
+            targetRoute = AppRouter.homeChofer;
+          } else if (role == 'cliente' || role == 'empresa') {
+            targetRoute = AppRouter.homeCliente;
+          }
+        } catch (_) {
+          // Sin datos en Firestore → volver al onboarding
+        }
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(context, targetRoute, (_) => false);
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;

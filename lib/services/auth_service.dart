@@ -26,6 +26,15 @@ class FretixAuthService {
   // Se reasignan en initializeEmulators() si estamos en debug.
   FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
 
+  // Expone un callable usando la instancia configurada (emulador o producción).
+  // Toda la app debe usar este método — nunca FirebaseFunctions.instance directamente.
+  HttpsCallable getCallable(String name, {Duration timeout = const Duration(seconds: 15)}) {
+    return _functions.httpsCallable(
+      name,
+      options: HttpsCallableOptions(timeout: timeout),
+    );
+  }
+
   // Estado público
   User?         get currentUser      => _auth.currentUser;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -41,22 +50,32 @@ class FretixAuthService {
     const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
     if (!useEmulator) return;
 
-    // kIsWeb es una constante de compile-time, segura de usar aquí.
-    final host = kIsWeb ? 'localhost' : _androidHost();
+    const authPort = 9099;
 
-    const authPort      = 9099;
-    const functionsPort = 5001;
+    // En web dentro de Codespaces el emulador de Auth sigue en localhost:9099
+    // (el SDK de Auth usa un mecanismo interno que evita el bloqueo Mixed Content).
+    final authHost = kIsWeb ? 'localhost' : _androidHost();
+
+    // El emulador de Functions en HTTPS Codespaces NO puede ser localhost:5001
+    // porque el browser bloquea peticiones HTTP desde una página HTTPS (Mixed Content).
+    // Solución: apuntar al túnel seguro que Codespaces expone para el puerto 5001.
+    // useFunctionsEmulator espera solo el host — el SDK agrega el protocolo y el puerto.
+    // TODO(devops): mover este host a una dart-define (FUNCTIONS_EMULATOR_HOST)
+    // para no hardcodearlo cuando cambie el Codespace.
+    const functionsHostWeb = 'redesigned-cod-57x7rq7w9gg37x6g-5001.app.github.dev';
+    final functionsHost    = kIsWeb ? functionsHostWeb : _androidHost();
+    const functionsPort    = kIsWeb ? 443 : 5001;
 
     try {
-      await _auth.useAuthEmulator(host, authPort);
+      await _auth.useAuthEmulator(authHost, authPort);
 
       _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
-      _functions.useFunctionsEmulator(host, functionsPort);
+      _functions.useFunctionsEmulator(functionsHost, functionsPort);
 
       debugPrint(
         '[FretixAuth] 🔧 Emuladores activos\n'
-        '  Auth      → $host:$authPort\n'
-        '  Functions → $host:$functionsPort',
+        '  Auth      → $authHost:$authPort\n'
+        '  Functions → $functionsHost:$functionsPort',
       );
     } catch (e) {
       // Firebase lanza si el emulador ya fue configurado en un hot-restart.

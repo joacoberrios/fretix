@@ -47,7 +47,11 @@ const ROLE_TO_USER_ROLES = {
  * }
  */
 exports.completarOnboardingFretix = onCall(
-  { region: 'us-central1', enforceAppCheck: false },
+  {
+    region:          'us-central1',
+    enforceAppCheck: false,
+    cors:            true,
+  },
   async (request) => {
     // ── Validación de autenticación ──────────────────────────────────────────
     if (!request.auth) {
