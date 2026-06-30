@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../router/app_router.dart';
 import '../../services/auth_service.dart';
 import '../../theme/fretix_colors.dart';
 
@@ -225,7 +226,7 @@ class _PedirFleteButton extends StatelessWidget {
             'Pedir flete',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          onPressed: () {},
+          onPressed: () => Navigator.of(context).pushNamed(AppRouter.cotizacion),
         ),
       ),
     );
