@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -92,10 +93,16 @@ class FretixAuthService {
       _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
       _functions.useFunctionsEmulator(functionsHost, functionsPort);
 
+      // Firestore emulator: mismo host que Auth (localhost tanto en web como en Android).
+      const firestorePort = 8282;
+      final firestoreHost = kIsWeb ? 'localhost' : _androidHost();
+      FirebaseFirestore.instance.useEmulator(firestoreHost, firestorePort);
+
       debugPrint(
         '[FretixAuth] 🔧 Emuladores activos\n'
         '  Auth      → $authHost:$authPort\n'
-        '  Functions → $functionsHost:$functionsPort',
+        '  Functions → $functionsHost:$functionsPort\n'
+        '  Firestore → $firestoreHost:$firestorePort',
       );
     } catch (e) {
       // Firebase lanza si el emulador ya fue configurado en un hot-restart.
