@@ -169,16 +169,53 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // /config/{configId}
+    // /config/{configId}  — tarifas y configuración de app
     // ─────────────────────────────────────────────────────────────────────────
     match /config/{configId} {
-      // Lectura: cualquier usuario autenticado puede leer las tarifas públicas
-      // (el cotizador en Flutter puede mostrarlas antes de confirmar el viaje)
+      // Lectura: cualquier usuario autenticado (el cotizador muestra tarifas al cliente)
       allow read: if isAuth();
 
-      // Escritura: solo admins (panel de administración de tarifas)
-      // En producción esto también se hace via Cloud Function para tener auditoría.
+      // Escritura: SOLO admin con custom claim — nunca operativo ni cliente.
+      // Todo cambio de tarifa en producción debe pasar por Cloud Function
+      // que escriba aquí Y en /audit_log (Panel Admin, Módulo 5).
       allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /audit_log/{logId}  — registro inmutable de cambios críticos de negocio
+    // ─────────────────────────────────────────────────────────────────────────
+    match /audit_log/{logId} {
+      // Lectura: solo admin (no exponer historial de cambios a operativos)
+      allow read: if isAdmin();
+
+      // Creación: solo Cloud Functions vía Admin SDK (bypasea estas reglas).
+      // Nunca desde el cliente. El documento es inmutable post-creación.
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /viajes/{viajeId}  — ciclo de vida de cada viaje confirmado
+    // ─────────────────────────────────────────────────────────────────────────
+    match /viajes/{viajeId} {
+      // Lectura: cliente que solicitó, chofer asignado, o admin
+      allow read: if isAuth() && (
+        resource.data.clienteUid == request.auth.uid ||
+        resource.data.choferUid  == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Creación desde el cliente: solo estado 'pending' y solo cliente particular.
+      // B2B (clientType='empresa') pasa por Cloud Function que valida crédito primero.
+      allow create: if isAuth()
+        && request.resource.data.estado     == 'pending'
+        && request.resource.data.clienteUid == request.auth.uid
+        && request.resource.data.clientType == 'particular';
+
+      // Actualización de estado: NUNCA desde el cliente — solo Cloud Functions.
+      allow update: if false;
+      allow delete: if false;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
