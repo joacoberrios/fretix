@@ -4,8 +4,8 @@
 // Si FIRESTORE_EMULATOR_HOST está seteada, admin SDK la usa automáticamente.
 // Forzamos el valor por defecto para ejecución local si no viene del entorno.
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
-  process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
-  console.log('[seed] FIRESTORE_EMULATOR_HOST no estaba seteada → usando localhost:8080');
+  process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8282';
+  console.log('[seed] FIRESTORE_EMULATOR_HOST no estaba seteada → usando localhost:8282');
 }
 
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
