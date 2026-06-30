@@ -171,10 +171,18 @@ class FretixAuthService {
 
     debugPrint('[FretixAuth] Llamando completarOnboardingFretix → rol: ${rol.firestoreId}');
 
-    final result = await callable.call(payload);
-    final data   = Map<String, dynamic>.from(result.data as Map);
-
-    debugPrint('[FretixAuth] Onboarding completado: $data');
+    try {
+      final result = await callable.call(payload);
+      final data   = Map<String, dynamic>.from(result.data as Map);
+      debugPrint('[FretixAuth] Onboarding completado: $data');
+    } catch (e) {
+      const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
+      if (useEmulator) {
+        debugPrint('[FretixAuth] Function falló en emulador (ignorado): $e');
+      } else {
+        rethrow;
+      }
+    }
 
     // Navegar al home con GlobalKey — sin BuildContext (invariante #1)
     final targetRoute = rol.esTransportista
