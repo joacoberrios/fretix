@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../screens/auth/otp_screen.dart';
 import '../screens/auth/phone_input_screen.dart';
+import '../screens/home/home_cliente_screen.dart';
+import '../screens/home/home_chofer_screen.dart';
 import '../screens/onboarding/role_selection_screen.dart';
-// import '../screens/home/home_screen.dart';
 
 /// Centraliza todas las rutas nombradas de la app.
 /// Se usa onGenerateRoute (no routes: {}) para poder pasar argumentos tipados.
@@ -44,11 +45,11 @@ abstract class AppRouter {
       case roleSelection:
         return _fadeRoute(const RoleSelectionScreen(), settings);
 
-      // ── Rutas pendientes de implementación ────────────────────────────
-      // case home:
-      // case homeCliente:
-      // case homeChofer:
-      //   return _fadeRoute(const HomeScreen(), settings);
+      case homeCliente:
+        return _fadeRoute(const HomeClienteScreen(), settings);
+
+      case homeChofer:
+        return _fadeRoute(const HomeChoferScreen(), settings);
 
       default:
         // Ruta no encontrada — pantalla de error temporal
