@@ -6,6 +6,9 @@ import '../../router/app_router.dart';
 import '../../services/auth_service.dart';
 import '../../theme/fretix_colors.dart';
 
+const bool _kUseEmulator =
+    bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PhoneInputScreen
 //
@@ -122,6 +125,26 @@ class _PhoneInputScreenState extends State<PhoneInputScreen>
     );
   }
 
+  // ── Solo emulador: bypass de OTP para testing manual ─────────────────────
+  Future<void> _debugLogin() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      await FretixAuthService.instance.debugSignInEmail();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRouter.searchLocation,
+        (_) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error   = 'Debug login falló: $e';
+      });
+    }
+  }
+
   String _mensajeError(String code) {
     switch (code) {
       case 'invalid-phone-number':
@@ -176,6 +199,16 @@ class _PhoneInputScreenState extends State<PhoneInputScreen>
                   loading:   _loading,
                   onPressed: _loading ? null : _enviarCodigo,
                 ),
+                if (_kUseEmulator) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _loading ? null : _debugLogin,
+                    child: const Text(
+                      '🔧 Debug: login directo (emulador)',
+                      style: TextStyle(color: FretixColors.textMuted, fontSize: 12),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 32),
                 _PoliticaPrivacidad(),
                 const SizedBox(height: 16),

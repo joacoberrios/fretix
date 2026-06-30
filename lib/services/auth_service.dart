@@ -101,6 +101,38 @@ class FretixAuthService {
     );
   }
 
+  // ── Debug-only: login directo email/password contra el emulador ───────────
+  //
+  // Existe porque el flujo de consola JS (window.firebase_auth.getAuth())
+  // crea una instancia de Auth separada de la que usa este servicio, y esa
+  // instancia hace una llamada de red a producción antes de poder conectar
+  // el emulador — error reproducido 2 veces: "auth/emulator-config-failed".
+  // Esta función usa _auth (el mismo objeto ya conectado al emulador por
+  // initializeEmulators()), evitando el problema de raíz.
+  // Solo debe llamarse si USE_EMULATOR=true — el caller es responsable de
+  // ocultar el botón que la dispara en producción.
+  Future<User> debugSignInEmail({
+    String email    = 'test@fretix.com',
+    String password = 'test1234',
+  }) async {
+    try {
+      final cred = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return cred.user!;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+        final cred = await _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        return cred.user!;
+      }
+      rethrow;
+    }
+  }
+
   /// En Android el emulador AVD mapea 10.0.2.2 al localhost del host.
   /// En dispositivo físico conectado por USB no se puede usar el emulador
   /// de Auth sin un túnel — advertir en ese caso.
