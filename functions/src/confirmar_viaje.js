@@ -3,11 +3,10 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
-const db = getFirestore();
-
 const CATEGORIAS_VALIDAS = new Set(['mini', 'plus', 'max', 'heavy']);
 
 exports.confirmarViajeFretix = onCall(async (request) => {
+  const db  = getFirestore(); // lazy: después de que FIRESTORE_EMULATOR_HOST esté seteado
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Se requiere autenticación.');
 
