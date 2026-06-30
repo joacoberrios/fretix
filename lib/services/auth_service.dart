@@ -82,12 +82,17 @@ class FretixAuthService {
     _functions.useFunctionsEmulator(functionsHost, functionsPort);
 
     const firestorePort = 8282;
-    const firestoreTunnelHostWeb = 'redesigned-cod-57x7rq7w9gg37x6g-8282.app.github.dev';
-    final firestoreHost = kIsWeb ? firestoreTunnelHostWeb : '${_androidHost()}:$firestorePort';
+    // Web con emulador: acceder siempre a localhost:8282 directo (HTTP).
+    // Requiere abrir la app via VS Code port forwarding (localhost:3000),
+    // NO via la URL pública HTTPS del Codespace — esa bufferiza el
+    // backward channel de WebChannel y rompe las escrituras silenciosamente.
+    final firestoreHost = kIsWeb
+        ? 'localhost:$firestorePort'
+        : '${_androidHost()}:$firestorePort';
     try {
       FirebaseFirestore.instance.settings = Settings(
         host: firestoreHost,
-        sslEnabled: kIsWeb,
+        sslEnabled: false,
         persistenceEnabled: false,
       );
     } catch (e) {
