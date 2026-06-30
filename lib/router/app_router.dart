@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../models/cotizacion_args.dart';
 import '../screens/auth/otp_screen.dart';
 import '../screens/auth/phone_input_screen.dart';
+import '../screens/customer/buscando_chofer_screen.dart';
 import '../screens/customer/cotizacion_screen.dart';
+import '../screens/customer/search_location_screen.dart';
 import '../screens/home/home_cliente_screen.dart';
 import '../screens/home/home_chofer_screen.dart';
 import '../screens/onboarding/role_selection_screen.dart';
@@ -25,8 +28,10 @@ abstract class AppRouter {
   static const tripControl   = '/chofer/trip_control';
 
   // ── Rutas del cliente
-  static const cotizacion    = '/cliente/cotizar';
-  static const tripTracking  = '/cliente/tracking';
+  static const searchLocation = '/cliente/buscar';
+  static const cotizacion     = '/cliente/cotizar';
+  static const buscandoChofer = '/cliente/buscando';
+  static const tripTracking   = '/cliente/tracking';
 
   // ── Compartidas
   static const rating        = '/rating';
@@ -53,8 +58,15 @@ abstract class AppRouter {
       case homeChofer:
         return _fadeRoute(const HomeChoferScreen(), settings);
 
+      case searchLocation:
+        return _fadeRoute(const SearchLocationScreen(), settings);
+
       case cotizacion:
-        return _fadeRoute(const CotizacionScreen(), settings);
+        final args = settings.arguments as CotizacionArgs?;
+        return _fadeRoute(CotizacionScreen(args: args), settings);
+
+      case buscandoChofer:
+        return _fadeRoute(const BuscandoChoferScreen(), settings);
 
       default:
         // Ruta no encontrada — pantalla de error temporal

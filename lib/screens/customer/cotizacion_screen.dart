@@ -6,16 +6,19 @@
 
 import 'dart:math' show sin, cos, asin, sqrt, pi;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../models/cotizacion_args.dart';
+import '../../router/app_router.dart';
 import '../../services/auth_service.dart';
 import '../../theme/fretix_colors.dart';
 
-// ── Coordenadas mock — Mendoza Capital.
-// TODO(Módulo 4): recibir via RouteSettings.arguments desde MapsService.
+// ── Coordenadas mock — Mendoza Capital (usadas cuando no vienen args).
 const _kOrigenMock  = LatLng(-32.8908, -68.8272);
 const _kDestinoMock = LatLng(-32.9500, -68.8700);
 
@@ -58,7 +61,9 @@ const _kCategorias = [
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class CotizacionScreen extends StatefulWidget {
-  const CotizacionScreen({super.key});
+  const CotizacionScreen({super.key, this.args});
+
+  final CotizacionArgs? args;
 
   @override
   State<CotizacionScreen> createState() => _CotizacionScreenState();
@@ -88,14 +93,18 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
   Set<Marker>   _markers   = {};
   Set<Polyline> _polylines = {};
 
-  // Coordenadas activas — mock hasta que Módulo 4 inyecte las reales.
-  final LatLng _origen  = _kOrigenMock;
-  final LatLng _destino = _kDestinoMock;
+  // Coordenadas activas — desde args o mock si viene sin ellas.
+  late final LatLng _origen;
+  late final LatLng _destino;
+
+  bool _isConfirming = false;
 
   @override
   void initState() {
     super.initState();
-    _cotizar(); // cotización inicial al montar la pantalla
+    _origen  = widget.args?.origen  ?? _kOrigenMock;
+    _destino = widget.args?.destino ?? _kDestinoMock;
+    _cotizar();
   }
 
   @override
@@ -288,6 +297,48 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
     ));
   }
 
+  // ── [CONFIRMAR VIAJE] Escribe /viajes/{id} en Firestore y navega al tracking.
+  Future<void> _confirmarViaje() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _cotizacionActual == null) return;
+
+    setState(() => _isConfirming = true);
+    try {
+      await FirebaseFirestore.instance.collection('viajes').add({
+        'clienteUid':    user.uid,
+        'clientType':    'particular',
+        'estado':        'pending',
+        'pricingMethod': _cotizacionActual!['mapsFuente'] ?? 'haversine_contingencia',
+        'categoria':     _selectedCategory,
+        'ayudante':      _hasHelper,
+        'origen': {
+          'lat':     _origen.latitude,
+          'lng':     _origen.longitude,
+          'address': widget.args?.origenLabel ?? '',
+        },
+        'destino': {
+          'lat':     _destino.latitude,
+          'lng':     _destino.longitude,
+          'address': widget.args?.destinoLabel ?? '',
+        },
+        'cotizacion': {
+          'total':       _cotizacionActual!['total'],
+          'distanciaKm': _cotizacionActual!['distanciaKm'],
+          'duracionMin': _cotizacionActual!['duracionMin'],
+        },
+        'creadoEn': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      Navigator.of(context).pushNamed(AppRouter.buscandoChofer);
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorSnackBar('No se pudo confirmar el viaje. Intentá de nuevo.');
+    } finally {
+      if (mounted) setState(() => _isConfirming = false);
+    }
+  }
+
   // [REACTIVE] Cambio de categoría → nueva cotización automática (Spec D).
   void _onCategoryChanged(String cat) {
     if (_selectedCategory == cat) return;
@@ -348,11 +399,21 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasArgs = widget.args != null;
+
     return Scaffold(
       backgroundColor: FretixColors.background,
       body: SafeArea(
         child: Column(
           children: [
+            // ── Chips de ruta (Módulo 4) — solo cuando vienen args de SearchLocation.
+            if (hasArgs)
+              _RouteChips(
+                origenLabel:  widget.args!.origenLabel,
+                destinoLabel: widget.args!.destinoLabel,
+                onBack: () => Navigator.of(context).pop(),
+              ),
+
             // ── Zona superior 60% — mapa o contingencia (Spec A + G) ──────────
             Expanded(
               flex: 6,
@@ -386,13 +447,14 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                 selectedCategory:  _selectedCategory,
                 hasHelper:         _hasHelper,
                 isLoading:         _isLoading,
+                isConfirming:      _isConfirming,
                 precioAnterior:    _precioAnterior,
                 precioActual:      _precioActual,
                 formatPeso:        _formatPeso,
                 onCategoryChanged: _onCategoryChanged,
                 onHelperChanged:   _onHelperChanged,
-                // TODO(Módulo 4): conectar con puedeConfirmarPorCredito real.
-                puedeConfirmar: false,
+                puedeConfirmar:    _cotizacionActual != null && !_isLoading,
+                onConfirmar:       _confirmarViaje,
               ),
             ),
           ],
@@ -504,23 +566,27 @@ class _PanelControl extends StatelessWidget {
     required this.selectedCategory,
     required this.hasHelper,
     required this.isLoading,
+    required this.isConfirming,
     required this.precioAnterior,
     required this.precioActual,
     required this.formatPeso,
     required this.onCategoryChanged,
     required this.onHelperChanged,
     required this.puedeConfirmar,
+    required this.onConfirmar,
   });
 
   final String   selectedCategory;
   final bool     hasHelper;
   final bool     isLoading;
+  final bool     isConfirming;
   final double   precioAnterior;
   final double   precioActual;
   final String Function(double)  formatPeso;
   final void Function(String)    onCategoryChanged;
   final void Function(bool)      onHelperChanged;
   final bool     puedeConfirmar;
+  final Future<void> Function()  onConfirmar;
 
   @override
   Widget build(BuildContext context) {
@@ -588,13 +654,12 @@ class _PanelControl extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Botón confirmar — placeholder deshabilitado (Spec H + I)
-                  // TODO(Módulo 4): habilitar y conectar flujo de creación de viaje.
+                  // ── Botón confirmar (Módulo 4)
                   SizedBox(
                     width:  double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: null, // deshabilitado — Módulo 4
+                      onPressed: puedeConfirmar && !isConfirming ? onConfirmar : null,
                       style: ElevatedButton.styleFrom(
                         disabledBackgroundColor: FretixColors.surfaceBorder,
                         disabledForegroundColor: FretixColors.textMuted,
@@ -602,10 +667,18 @@ class _PanelControl extends StatelessWidget {
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: const Text(
-                        'Confirmar viaje',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                      ),
+                      child: isConfirming
+                          ? const SizedBox(
+                              width: 20, height: 20,
+                              child: CircularProgressIndicator(
+                                color:       FretixColors.accent,
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : const Text(
+                              'Confirmar viaje',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                            ),
                     ),
                   ),
                 ],
@@ -764,6 +837,84 @@ class _CarruselCategorias extends StatelessWidget {
 // _SwitchAyudante — custom con AnimatedAlign + AnimatedContainer (Spec F)
 // NO usa Switch Material. Activo: FretixColors.accent. Inactivo: surfaceBorder.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// _RouteChips — chips de origen/destino en la parte superior (Módulo 4)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _RouteChips extends StatelessWidget {
+  const _RouteChips({
+    required this.origenLabel,
+    required this.destinoLabel,
+    required this.onBack,
+  });
+
+  final String origenLabel;
+  final String destinoLabel;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 10, 20, 0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: FretixColors.textSecondary, size: 18),
+            onPressed: onBack,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _RouteChip(
+                  icon:  Icons.trip_origin_rounded,
+                  color: FretixColors.accent,
+                  label: origenLabel,
+                ),
+                const SizedBox(height: 4),
+                _RouteChip(
+                  icon:  Icons.location_on_rounded,
+                  color: FretixColors.textSecondary,
+                  label: destinoLabel,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteChip extends StatelessWidget {
+  const _RouteChip({required this.icon, required this.color, required this.label});
+  final IconData icon;
+  final Color    color;
+  final String   label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 14),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            maxLines:  1,
+            overflow:  TextOverflow.ellipsis,
+            style: const TextStyle(
+              color:    FretixColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _SwitchAyudante extends StatelessWidget {
   const _SwitchAyudante({required this.value, required this.onChanged});

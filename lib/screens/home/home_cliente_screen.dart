@@ -226,7 +226,7 @@ class _PedirFleteButton extends StatelessWidget {
             'Pedir flete',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          onPressed: () => Navigator.of(context).pushNamed(AppRouter.cotizacion),
+          onPressed: () => Navigator.of(context).pushNamed(AppRouter.searchLocation),
         ),
       ),
     );
