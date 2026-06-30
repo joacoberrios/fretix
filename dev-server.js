@@ -34,6 +34,7 @@ const MIME = {
 };
 
 function proxyTo(targetPort, req, res) {
+  console.log(`[proxy →${targetPort}] ${req.method} ${req.url}`);
   const options = {
     hostname: 'localhost',
     port: targetPort,
@@ -42,11 +43,12 @@ function proxyTo(targetPort, req, res) {
     headers: { ...req.headers, host: `localhost:${targetPort}` },
   };
   const proxy = http.request(options, (pr) => {
+    console.log(`[proxy →${targetPort}] response ${pr.statusCode} for ${req.url}`);
     res.writeHead(pr.statusCode, pr.headers);
     pr.pipe(res, { end: true });
   });
   proxy.on('error', (e) => {
-    console.error(`Proxy →${targetPort} error:`, e.message);
+    console.error(`[proxy →${targetPort}] ERROR for ${req.url}:`, e.message);
     res.writeHead(502);
     res.end('Bad Gateway');
   });
@@ -67,6 +69,7 @@ const server = http.createServer((req, res) => {
   }
 
   // ── Static files (Flutter web)
+  console.log(`[static] ${req.method} ${req.url}`);
   let filePath = path.join(STATIC_DIR, url === '/' ? 'index.html' : url);
 
   // Si el archivo no existe → devolver index.html (SPA routing)
