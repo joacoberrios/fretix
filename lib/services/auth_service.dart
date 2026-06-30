@@ -56,50 +56,49 @@ class FretixAuthService {
     if (!useEmulator) return;
 
     const authPort = 9099;
-
-    // En web dentro de Codespaces el emulador de Auth sigue en localhost:9099
-    // (el SDK de Auth usa un mecanismo interno que evita el bloqueo Mixed Content).
     final authHost = kIsWeb ? 'localhost' : _androidHost();
 
-    // En web+Codespaces, dev-server.js proxea /fretix-dev-jb/... al puerto 5001
-    // en el mismo origen → sin CORS ni Mixed Content.
-    // En Android usamos 10.0.2.2:5001 directamente.
-    final functionsHost = kIsWeb ? 'localhost' : _androidHost();
-    const functionsPort = kIsWeb ? 3000 : 5001;
-
+    // Bug B fix: useAuthEmulator lanza "already configured" en hot-restart.
+    // Aislamos solo esa llamada en try/catch — el resto del setup SIEMPRE corre.
     try {
       await _auth.useAuthEmulator(authHost, authPort);
+    } catch (e) {
+      debugPrint('[FretixAuth] useAuthEmulator ya configurado (hot-restart): $e');
+    }
 
-      // En web el SDK de Auth llama reCAPTCHA Enterprise incluso en emulador.
-      // Esto falla con API key placeholder. Deshabilitar app verification en tests.
-      if (kIsWeb) {
-        await _auth.setSettings(appVerificationDisabledForTesting: true);
-      }
+    if (kIsWeb) {
+      await _auth.setSettings(appVerificationDisabledForTesting: true);
+    }
 
-      _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
-      _functions.useFunctionsEmulator(functionsHost, functionsPort);
+    // Bug A fix: en web+Codespaces 'localhost' es la máquina del usuario, no el Codespace.
+    // dev-server.js corre en el mismo origen que la app (mismo túnel, mismo puerto 3000)
+    // y proxea /fretix-dev-jb/... → localhost:5001 y /google.firestore.v1.Firestore/... → localhost:8282.
+    // Usamos el hostname del túnel de port 3000 para que el SDK construya URLs same-origin.
+    const appTunnelHostWeb  = 'redesigned-cod-57x7rq7w9gg37x6g-3000.app.github.dev';
+    final functionsHost = kIsWeb ? appTunnelHostWeb : _androidHost();
+    const functionsPort = kIsWeb ? 443 : 5001;
 
-      // Firestore emulator: en web+Codespaces dev-server.js proxea
-      // /google.firestore.v1.Firestore/... al puerto 8282 en el mismo origen.
-      // Sin CORS. En Android apuntamos directo al emulador.
-      const firestorePort = 8282;
-      final firestoreHost = kIsWeb ? 'localhost:3000' : '${_androidHost()}:$firestorePort';
+    _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+    _functions.useFunctionsEmulator(functionsHost, functionsPort);
+
+    const firestorePort = 8282;
+    final firestoreHost = kIsWeb ? appTunnelHostWeb : '${_androidHost()}:$firestorePort';
+    try {
       FirebaseFirestore.instance.settings = Settings(
         host: firestoreHost,
         sslEnabled: kIsWeb,
         persistenceEnabled: false,
       );
-
-      debugPrint(
-        '[FretixAuth] 🔧 Emuladores activos\n'
-        '  Auth      → $authHost:$authPort\n'
-        '  Functions → $functionsHost:$functionsPort\n'
-        '  Firestore → $firestoreHost',
-      );
     } catch (e) {
-      // Firebase lanza si el emulador ya fue configurado en un hot-restart.
-      debugPrint('[FretixAuth] Emulador ya inicializado (hot-restart): $e');
+      debugPrint('[FretixAuth] Firestore settings ya configurado (hot-restart): $e');
     }
+
+    debugPrint(
+      '[FretixAuth] 🔧 Emuladores activos\n'
+      '  Auth      → $authHost:$authPort\n'
+      '  Functions → $functionsHost:$functionsPort\n'
+      '  Firestore → $firestoreHost',
+    );
   }
 
   /// En Android el emulador AVD mapea 10.0.2.2 al localhost del host.
