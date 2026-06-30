@@ -67,56 +67,38 @@ class FretixAuthService {
     const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
     if (!useEmulator) return;
 
-    const authPort = 9099;
-    final authHost = kIsWeb ? 'localhost' : _androidHost();
-
-    // Bug B fix: useAuthEmulator lanza "already configured" en hot-restart.
-    // Aislamos solo esa llamada en try/catch — el resto del setup SIEMPRE corre.
+    // Auth — puede fallar en hot-restart ("already configured"), aislado
     try {
-      await _auth.useAuthEmulator(authHost, authPort);
+      final authHost = kIsWeb ? 'localhost' : _androidHost();
+      await _auth.useAuthEmulator(authHost, 9099);
+      if (kIsWeb) await _auth.setSettings(appVerificationDisabledForTesting: true);
+      debugPrint('[FretixAuth] Auth → $authHost:9099');
     } catch (e) {
-      debugPrint('[FretixAuth] useAuthEmulator ya configurado (hot-restart): $e');
+      debugPrint('[FretixAuth] Auth emulator ya configurado: $e');
     }
 
-    if (kIsWeb) {
-      await _auth.setSettings(appVerificationDisabledForTesting: true);
-    }
-
-    // Bug A fix: en web+Codespaces 'localhost' es la máquina del usuario, no el Codespace.
-    // dev-server.js corre en el mismo origen que la app (mismo túnel, mismo puerto 3000)
-    // y proxea /fretix-dev-jb/... → localhost:5001 y /google.firestore.v1.Firestore/... → localhost:8282.
-    // Usamos el hostname del túnel de port 3000 para que el SDK construya URLs same-origin.
-    const appTunnelHostWeb  = 'redesigned-cod-57x7rq7w9gg37x6g-3000.app.github.dev';
-    final functionsHost = kIsWeb ? appTunnelHostWeb : _androidHost();
-    const functionsPort = kIsWeb ? 443 : 5001;
-
-    _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
-    _functions.useFunctionsEmulator(functionsHost, functionsPort);
-
-    const firestorePort = 8282;
-    // Web con emulador: acceder siempre a localhost:8282 directo (HTTP).
-    // Requiere abrir la app via VS Code port forwarding (localhost:3000),
-    // NO via la URL pública HTTPS del Codespace — esa bufferiza el
-    // backward channel de WebChannel y rompe las escrituras silenciosamente.
-    final firestoreHost = kIsWeb
-        ? 'localhost:$firestorePort'
-        : '${_androidHost()}:$firestorePort';
+    // Firestore — separado, no depende de que Auth funcione
     try {
       FirebaseFirestore.instance.settings = Settings(
-        host: firestoreHost,
+        host: 'localhost:8282',
         sslEnabled: false,
         persistenceEnabled: false,
       );
+      debugPrint('[FretixAuth] Firestore → localhost:8282');
     } catch (e) {
-      debugPrint('[FretixAuth] Firestore settings ya configurado (hot-restart): $e');
+      debugPrint('[FretixAuth] ERROR Firestore emulator: $e');
     }
 
-    debugPrint(
-      '[FretixAuth] 🔧 Emuladores activos\n'
-      '  Auth      → $authHost:$authPort\n'
-      '  Functions → $functionsHost:$functionsPort\n'
-      '  Firestore → $firestoreHost',
-    );
+    // Functions — separado, ídem
+    try {
+      _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      _functions.useFunctionsEmulator('localhost', 5001);
+      debugPrint('[FretixAuth] Functions → localhost:5001');
+    } catch (e) {
+      debugPrint('[FretixAuth] ERROR Functions emulator: $e');
+    }
+
+    debugPrint('[FretixAuth] 🔧 Emuladores activos');
   }
 
   // ── Debug-only: login directo email/password contra el emulador ───────────
