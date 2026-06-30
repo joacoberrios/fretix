@@ -93,12 +93,14 @@ class FretixAuthService {
       _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
       _functions.useFunctionsEmulator(functionsHost, functionsPort);
 
-      // Firestore emulator: mismo host que Auth (localhost tanto en web como en Android).
+      // Firestore emulator: en web+Codespaces usamos el túnel HTTPS (igual que Functions)
+      // para evitar Mixed Content desde la página HTTPS. En Android usamos 10.0.2.2.
       const firestorePort = 8282;
-      final firestoreHost = kIsWeb ? 'localhost' : _androidHost();
+      const firestoreTunnelWeb = 'redesigned-cod-57x7rq7w9gg37x6g-8282.app.github.dev';
+      final firestoreHost = kIsWeb ? firestoreTunnelWeb : '${_androidHost()}:$firestorePort';
       FirebaseFirestore.instance.settings = Settings(
-        host: '$firestoreHost:$firestorePort',
-        sslEnabled: false,
+        host: firestoreHost,
+        sslEnabled: kIsWeb,
         persistenceEnabled: false,
       );
 
@@ -106,7 +108,7 @@ class FretixAuthService {
         '[FretixAuth] 🔧 Emuladores activos\n'
         '  Auth      → $authHost:$authPort\n'
         '  Functions → $functionsHost:$functionsPort\n'
-        '  Firestore → $firestoreHost:$firestorePort',
+        '  Firestore → $firestoreHost',
       );
     } catch (e) {
       // Firebase lanza si el emulador ya fue configurado en un hot-restart.
