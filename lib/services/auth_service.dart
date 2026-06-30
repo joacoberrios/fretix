@@ -96,7 +96,11 @@ class FretixAuthService {
       // Firestore emulator: mismo host que Auth (localhost tanto en web como en Android).
       const firestorePort = 8282;
       final firestoreHost = kIsWeb ? 'localhost' : _androidHost();
-      FirebaseFirestore.instance.useEmulator(firestoreHost, firestorePort);
+      FirebaseFirestore.instance.settings = Settings(
+        host: '$firestoreHost:$firestorePort',
+        sslEnabled: false,
+        persistenceEnabled: false,
+      );
 
       debugPrint(
         '[FretixAuth] 🔧 Emuladores activos\n'
