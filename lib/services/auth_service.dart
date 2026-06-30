@@ -82,7 +82,8 @@ class FretixAuthService {
     _functions.useFunctionsEmulator(functionsHost, functionsPort);
 
     const firestorePort = 8282;
-    final firestoreHost = kIsWeb ? appTunnelHostWeb : '${_androidHost()}:$firestorePort';
+    const firestoreTunnelHostWeb = 'redesigned-cod-57x7rq7w9gg37x6g-8282.app.github.dev';
+    final firestoreHost = kIsWeb ? firestoreTunnelHostWeb : '${_androidHost()}:$firestorePort';
     try {
       FirebaseFirestore.instance.settings = Settings(
         host: firestoreHost,
