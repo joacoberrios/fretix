@@ -38,14 +38,14 @@ const MIME = {
 // changeOrigin:true → reescribe el header Host al target.
 // ws:true → habilita el passthrough de WebSocket/upgrade por si acaso.
 const firestoreProxy = httpProxy.createProxyServer({
-  target:       `http://localhost:${FIRESTORE_PORT}`,
+  target:       `http://127.0.0.1:${FIRESTORE_PORT}`,
   changeOrigin: true,
   ws:           true,
   selfHandleResponse: false,
 });
 
 const functionsProxy = httpProxy.createProxyServer({
-  target:       `http://localhost:${FUNCTIONS_PORT}`,
+  target:       `http://127.0.0.1:${FUNCTIONS_PORT}`,
   changeOrigin: true,
   ws:           true,
   selfHandleResponse: false,
