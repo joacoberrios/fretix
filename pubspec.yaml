@@ -31,8 +31,6 @@ dependencies:
   # ── Estado (liviana, sin boilerplate excesivo para este scope) ───────────
   provider:                  ^6.1.2
 
-  # ── HTTP (Places API REST) ────────────────────────────────────────────────
-  http:                      ^1.2.0
 
 flutter:
   uses-material-design: true

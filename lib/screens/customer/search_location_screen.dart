@@ -1,73 +1,92 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:html' as html show window;
+import 'dart:js_util' as js_util;
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
 
 import '../../models/cotizacion_args.dart';
 import '../../router/app_router.dart';
 import '../../theme/fretix_colors.dart';
 
-const _kApiKey = 'AIzaSyA5-F6OPZbVB35PnuDx7FH29R5Cd9ZZ45U';
-
-// ── Llama a New Places API v1 (soporta CORS desde browser).
-// Documentación: https://developers.google.com/maps/documentation/places/web-service/place-autocomplete
+// ── Autocomplete via google.maps.places.AutocompleteService (Maps JS ya cargado).
+// Sin llamadas REST propias → sin CORS, sin APIs adicionales que habilitar.
 Future<List<_PlaceSuggestion>> _autocomplete(String input) async {
   if (input.trim().length < 3) return [];
+  final completer = Completer<List<_PlaceSuggestion>>();
+  try {
+    final google  = js_util.getProperty(html.window, 'google');
+    final maps    = js_util.getProperty(google, 'maps');
+    final places  = js_util.getProperty(maps, 'places');
+    final service = js_util.callConstructor(
+      js_util.getProperty(places, 'AutocompleteService') as Object,
+      [],
+    );
 
-  final uri = Uri.parse('https://places.googleapis.com/v1/places:autocomplete');
-  final resp = await http.post(
-    uri,
-    headers: {
-      'Content-Type':    'application/json',
-      'X-Goog-Api-Key':  _kApiKey,
-      'X-Goog-FieldMask': 'suggestions.placePrediction.placeId,suggestions.placePrediction.text',
-    },
-    body: jsonEncode({
-      'input':              input,
-      'languageCode':       'es',
-      'regionCode':         'AR',
-      'includedRegionCodes': ['ar'],
-    }),
-  );
+    final request = js_util.jsify({
+      'input': input,
+      'componentRestrictions': {'country': 'ar'},
+    });
 
-  if (resp.statusCode != 200) return [];
-  final data = jsonDecode(resp.body) as Map<String, dynamic>;
-  final suggestions = (data['suggestions'] as List<dynamic>?) ?? [];
-  return suggestions
-      .whereType<Map<String, dynamic>>()
-      .where((s) => s['placePrediction'] != null)
-      .map((s) {
-        final pred = s['placePrediction'] as Map<String, dynamic>;
-        return _PlaceSuggestion(
-          placeId: pred['placeId'] as String,
-          text:    (pred['text'] as Map<String, dynamic>?)?['text'] as String? ?? '',
-        );
-      })
-      .toList();
+    js_util.callMethod(service, 'getPlacePredictions', [
+      request,
+      js_util.allowInterop((predictions, status) {
+        if (js_util.dartify(status) != 'OK') {
+          completer.complete([]);
+          return;
+        }
+        final count   = js_util.getProperty<int>(predictions, 'length');
+        final results = <_PlaceSuggestion>[];
+        for (var i = 0; i < count; i++) {
+          final p = js_util.getProperty(predictions, i);
+          results.add(_PlaceSuggestion(
+            placeId: js_util.getProperty<String>(p, 'place_id'),
+            text:    js_util.getProperty<String>(p, 'description'),
+          ));
+        }
+        completer.complete(results);
+      }),
+    ]);
+  } catch (_) {
+    completer.complete([]);
+  }
+  return completer.future;
 }
 
-// ── Resuelve coordenadas desde placeId usando New Places API v1.
+// ── Coordenadas via google.maps.Geocoder (parte del Maps JS core).
 Future<LatLng?> _resolveCoords(String placeId) async {
-  final uri = Uri.parse(
-    'https://places.googleapis.com/v1/places/$placeId',
-  );
-  final resp = await http.get(
-    uri,
-    headers: {
-      'X-Goog-Api-Key':  _kApiKey,
-      'X-Goog-FieldMask': 'location',
-    },
-  );
-  if (resp.statusCode != 200) return null;
-  final data     = jsonDecode(resp.body) as Map<String, dynamic>;
-  final location = data['location'] as Map<String, dynamic>?;
-  if (location == null) return null;
-  return LatLng(
-    (location['latitude']  as num).toDouble(),
-    (location['longitude'] as num).toDouble(),
-  );
+  final completer = Completer<LatLng?>();
+  try {
+    final google   = js_util.getProperty(html.window, 'google');
+    final maps     = js_util.getProperty(google, 'maps');
+    final geocoder = js_util.callConstructor(
+      js_util.getProperty(maps, 'Geocoder') as Object,
+      [],
+    );
+
+    js_util.callMethod(geocoder, 'geocode', [
+      js_util.jsify({'placeId': placeId}),
+      js_util.allowInterop((results, status) {
+        if (js_util.dartify(status) != 'OK') {
+          completer.complete(null);
+          return;
+        }
+        try {
+          final first    = js_util.getProperty(results, 0);
+          final geometry = js_util.getProperty(first, 'geometry');
+          final location = js_util.getProperty(geometry, 'location');
+          final lat = (js_util.callMethod(location, 'lat', []) as num).toDouble();
+          final lng = (js_util.callMethod(location, 'lng', []) as num).toDouble();
+          completer.complete(LatLng(lat, lng));
+        } catch (_) {
+          completer.complete(null);
+        }
+      }),
+    ]);
+  } catch (_) {
+    completer.complete(null);
+  }
+  return completer.future;
 }
 
 class _PlaceSuggestion {
@@ -88,20 +107,18 @@ class SearchLocationScreen extends StatefulWidget {
 }
 
 class _SearchLocationScreenState extends State<SearchLocationScreen> {
-  final _origenCtrl  = TextEditingController();
-  final _destinoCtrl = TextEditingController();
+  final _origenCtrl   = TextEditingController();
+  final _destinoCtrl  = TextEditingController();
   final _origenFocus  = FocusNode();
   final _destinoFocus = FocusNode();
 
-  // 'origin' | 'destination'
-  String _activeField = 'origin';
-
+  String  _activeField = 'origin';
   LatLng? _origenLatLng;
   LatLng? _destinoLatLng;
 
-  List<_PlaceSuggestion> _suggestions = [];
-  bool   _isSuggesting = false;
-  bool   _isResolvingCoords = false;
+  List<_PlaceSuggestion> _suggestions     = [];
+  bool                   _isSuggesting    = false;
+  bool                   _isResolvingCoords = false;
 
   Timer? _debounce;
 
@@ -110,10 +127,9 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
     super.initState();
     _origenFocus.addListener(_onFocusChange);
     _destinoFocus.addListener(_onFocusChange);
-    // Foco inicial en origen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _origenFocus.requestFocus();
-    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _origenFocus.requestFocus(),
+    );
   }
 
   @override
@@ -128,14 +144,13 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
 
   void _onFocusChange() {
     if (_origenFocus.hasFocus) {
-      setState(() { _activeField = 'origin'; _suggestions = []; });
+      setState(() { _activeField = 'origin';      _suggestions = []; });
     } else if (_destinoFocus.hasFocus) {
       setState(() { _activeField = 'destination'; _suggestions = []; });
     }
   }
 
   void _onTextChanged(String text) {
-    // Limpiar coords cuando el usuario edita el campo
     if (_activeField == 'origin')      _origenLatLng  = null;
     if (_activeField == 'destination') _destinoLatLng = null;
 
@@ -159,17 +174,16 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
     if (coords == null) {
       setState(() => _isResolvingCoords = false);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No se pudo obtener la ubicación. Intentá de nuevo.'),
+        content:         Text('No se pudo obtener la ubicación. Intentá de nuevo.'),
         backgroundColor: FretixColors.danger,
       ));
       return;
     }
 
     if (_activeField == 'origin') {
-      _origenCtrl.text  = s.text;
-      _origenLatLng     = coords;
+      _origenCtrl.text = s.text;
+      _origenLatLng    = coords;
       setState(() => _isResolvingCoords = false);
-      // Avanzar al destino
       _destinoFocus.requestFocus();
     } else {
       _destinoCtrl.text = s.text;
@@ -182,13 +196,15 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
 
   void _irACotizar() {
     if (!_listoPara) return;
-    final args = CotizacionArgs(
-      origen:       _origenLatLng!,
-      destino:      _destinoLatLng!,
-      origenLabel:  _origenCtrl.text.trim(),
-      destinoLabel: _destinoCtrl.text.trim(),
+    Navigator.of(context).pushReplacementNamed(
+      AppRouter.cotizacion,
+      arguments: CotizacionArgs(
+        origen:       _origenLatLng!,
+        destino:      _destinoLatLng!,
+        origenLabel:  _origenCtrl.text.trim(),
+        destinoLabel: _destinoCtrl.text.trim(),
+      ),
     );
-    Navigator.of(context).pushReplacementNamed(AppRouter.cotizacion, arguments: args);
   }
 
   @override
@@ -221,7 +237,7 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── Campos de búsqueda
+            // ── Campos
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -236,7 +252,7 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
                     hasValue:    _origenLatLng != null,
                     onChanged:   _onTextChanged,
                   ),
-                  _RouteLine(),
+                  const _RouteLine(),
                   _LocationField(
                     controller:  _destinoCtrl,
                     focusNode:   _destinoFocus,
@@ -252,13 +268,12 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
             ),
             const SizedBox(height: 8),
 
-            // ── Lista de sugerencias
+            // ── Sugerencias / spinner
             Expanded(
               child: _isResolvingCoords
                   ? const Center(
                       child: CircularProgressIndicator(
-                        color:       FretixColors.accent,
-                        strokeWidth: 2.5,
+                        color: FretixColors.accent, strokeWidth: 2.5,
                       ),
                     )
                   : _isSuggesting
@@ -266,23 +281,22 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
                           child: SizedBox(
                             width: 20, height: 20,
                             child: CircularProgressIndicator(
-                              color:       FretixColors.accent,
-                              strokeWidth: 2,
+                              color: FretixColors.accent, strokeWidth: 2,
                             ),
                           ),
                         )
                       : _suggestions.isNotEmpty
                           ? ListView.separated(
-                              padding:          const EdgeInsets.symmetric(horizontal: 20),
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
                               itemCount:        _suggestions.length,
                               separatorBuilder: (_, __) => const Divider(
-                                color: FretixColors.surfaceBorder,
-                                height: 1,
+                                color: FretixColors.surfaceBorder, height: 1,
                               ),
                               itemBuilder: (_, i) {
                                 final s = _suggestions[i];
                                 return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(vertical: 4),
                                   leading: const Icon(
                                     Icons.place_outlined,
                                     color: FretixColors.textMuted,
@@ -302,7 +316,7 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
                           : const SizedBox.shrink(),
             ),
 
-            // ── Botón "Ver precios"
+            // ── Botón Ver precios
             if (_listoPara)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -326,7 +340,7 @@ class _SearchLocationScreenState extends State<SearchLocationScreen> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// _LocationField
+// Widgets auxiliares
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _LocationField extends StatelessWidget {
@@ -353,8 +367,8 @@ class _LocationField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration:    const Duration(milliseconds: 150),
-      decoration:  BoxDecoration(
+      duration:   const Duration(milliseconds: 150),
+      decoration: BoxDecoration(
         color:        FretixColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
@@ -373,14 +387,12 @@ class _LocationField extends StatelessWidget {
               focusNode:  focusNode,
               onChanged:  onChanged,
               style: const TextStyle(
-                color:    FretixColors.textPrimary,
-                fontSize: 15,
+                color: FretixColors.textPrimary, fontSize: 15,
               ),
               decoration: InputDecoration(
                 hintText:        placeholder,
                 hintStyle: const TextStyle(
-                  color:    FretixColors.textMuted,
-                  fontSize: 15,
+                  color: FretixColors.textMuted, fontSize: 15,
                 ),
                 border:         InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -389,13 +401,11 @@ class _LocationField extends StatelessWidget {
           ),
           if (controller.text.isNotEmpty)
             GestureDetector(
-              onTap: () {
-                controller.clear();
-                onChanged('');
-              },
+              onTap: () { controller.clear(); onChanged(''); },
               child: const Padding(
                 padding: EdgeInsets.only(right: 12),
-                child: Icon(Icons.close_rounded, color: FretixColors.textMuted, size: 18),
+                child: Icon(Icons.close_rounded,
+                    color: FretixColors.textMuted, size: 18),
               ),
             ),
         ],
@@ -404,18 +414,17 @@ class _LocationField extends StatelessWidget {
   }
 }
 
-// ── Línea de conexión entre los dos campos
 class _RouteLine extends StatelessWidget {
+  const _RouteLine();
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 23),
+    return const Padding(
+      padding: EdgeInsets.only(left: 23),
       child: SizedBox(
         height: 8,
         child: VerticalDivider(
-          color: FretixColors.surfaceBorder,
-          thickness: 1.5,
-          width: 1.5,
+          color: FretixColors.surfaceBorder, thickness: 1.5, width: 1.5,
         ),
       ),
     );
