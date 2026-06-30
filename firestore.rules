@@ -1,0 +1,208 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Usuario autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // El uid del request coincide con el documento que se intenta leer/escribir
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // El usuario tiene el rol indicado en su token (custom claims — a setear
+    // desde Cloud Functions con admin.auth().setCustomUserClaims)
+    function hasRole(role) {
+      return request.auth.token.get('role', '') == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    // El usuario es miembro activo de la empresa indicada
+    // (se verifica leyendo /company_members — solo para reglas simples)
+    function isMemberOf(companyId) {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/company_members/$(request.auth.uid + '_' + companyId));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /users/{userId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Lectura: el propio usuario o un admin
+      allow read: if isAuth() && (isOwner(userId) || isAdmin());
+
+      // Creación: SOLO Cloud Functions (Admin SDK bypasea estas reglas).
+      // Desde el cliente nunca se crea un /users directamente.
+      allow create: if false;
+
+      // Actualización: el propio usuario puede editar solo campos de perfil,
+      // nunca el campo 'roles' ni 'isVerified'.
+      allow update: if isAuth()
+        && isOwner(userId)
+        && !('roles'      in request.resource.data.diff(resource.data).affectedKeys())
+        && !('isVerified' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('isActive'   in request.resource.data.diff(resource.data).affectedKeys());
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /companies/{companyId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /companies/{companyId} {
+      // Lectura: miembro de la empresa o admin
+      allow read: if isAuth() && (
+        resource.data.ownerUserId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Escritura: solo Cloud Functions (Admin SDK)
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /company_members/{membershipId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /company_members/{membershipId} {
+      // Lectura: el propio usuario referenciado o admin
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Escritura: solo Cloud Functions
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /drivers/{driverId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /drivers/{driverId} {
+      // Lectura: el propio chofer (por userId) o admin
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // El cliente puede leer datos básicos del chofer asignado a su viaje activo.
+      // Se resuelve vía Cloud Function en producción para no exponer datos sensibles.
+      // Escritura: solo Cloud Functions (ubicación, estado, stats)
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /vehicles/{vehicleId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /vehicles/{vehicleId} {
+      // Lectura: el dueño del vehículo (individual o empresa) o admin
+      allow read: if isAuth() && (
+        resource.data.owner.userId    == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Escritura: solo Cloud Functions (alta de vehículo, verificación de docs)
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /trips/{tripId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /trips/{tripId} {
+      // Lectura: cliente que solicitó el viaje, chofer asignado, o admin
+      allow read: if isAuth() && (
+        resource.data.solicitadoPor.userId == request.auth.uid ||
+        resource.data.asignacion.userId    == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Creación inicial (estado "quoting"): cualquier usuario autenticado
+      // puede crear el documento de cotización antes de confirmar.
+      // La Cloud Function confirmarViajeFretix valida y transiciona el estado.
+      allow create: if isAuth()
+        && request.resource.data.estado == 'quoting'
+        && request.resource.data.solicitadoPor.userId == request.auth.uid;
+
+      // Actualización de estado: NUNCA desde el cliente.
+      // Todos los cambios de estado pasan por Cloud Functions (Admin SDK).
+      allow update: if false;
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /quotations/{cotizacionId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /quotations/{cotizacionId} {
+      // Lectura: el usuario que generó la cotización o admin
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Escritura: solo Cloud Functions (cotizarViajeFretix)
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /ofertas_viaje/{ofertaId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /ofertas_viaje/{ofertaId} {
+      // Lectura: el chofer destinatario de la oferta puede leer su propia oferta
+      allow read: if isAuth() && (
+        resource.data.driverId != null &&
+        exists(/databases/$(database)/documents/drivers/$(resource.data.driverId)) &&
+        get(/databases/$(database)/documents/drivers/$(resource.data.driverId)).data.userId
+          == request.auth.uid
+      );
+
+      // Escritura: solo Cloud Functions (matcheo y TTL)
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /config/{configId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /config/{configId} {
+      // Lectura: cualquier usuario autenticado puede leer las tarifas públicas
+      // (el cotizador en Flutter puede mostrarlas antes de confirmar el viaje)
+      allow read: if isAuth();
+
+      // Escritura: solo admins (panel de administración de tarifas)
+      // En producción esto también se hace via Cloud Function para tener auditoría.
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /liquidaciones/{liquidacionId}
+    // ─────────────────────────────────────────────────────────────────────────
+    match /liquidaciones/{liquidacionId} {
+      // Lectura: la empresa transportista propietaria o admin
+      allow read: if isAuth() && (
+        resource.data.companyId != null &&
+        get(/databases/$(database)/documents/companies/$(resource.data.companyId))
+          .data.ownerUserId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Escritura: solo Cloud Functions (proceso quincenal de liquidación)
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CATCH-ALL: denegar todo lo no declarado explícitamente
+    // ─────────────────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

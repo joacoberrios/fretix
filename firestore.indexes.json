@@ -1,0 +1,65 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "drivers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estadoServicio",   "order": "ASCENDING" },
+        { "fieldPath": "vehicleCategory",  "order": "ASCENDING" },
+        { "fieldPath": "geohash",          "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "solicitadoPor.companyId", "order": "ASCENDING" },
+        { "fieldPath": "estado",                  "order": "ASCENDING" },
+        { "fieldPath": "completedAt",             "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "asignacion.employerCompanyId", "order": "ASCENDING" },
+        { "fieldPath": "estado",                       "order": "ASCENDING" },
+        { "fieldPath": "completedAt",                  "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ofertas_viaje",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driverId", "order": "ASCENDING" },
+        { "fieldPath": "estado",   "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "company_members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "role",      "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quotations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "generadoEn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "liquidaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "fecha",     "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
