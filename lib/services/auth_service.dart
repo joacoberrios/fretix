@@ -38,7 +38,8 @@ class FretixAuthService {
   //   Android Emulator → 10.0.2.2  (redirige al localhost del host)
   //   iOS Simulator / Web → localhost
   Future<void> initializeEmulators() async {
-    if (!kDebugMode) return;
+    const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
+    if (!useEmulator) return;
 
     // kIsWeb es una constante de compile-time, segura de usar aquí.
     final host = kIsWeb ? 'localhost' : _androidHost();
