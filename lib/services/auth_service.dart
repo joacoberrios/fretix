@@ -83,6 +83,12 @@ class FretixAuthService {
     try {
       await _auth.useAuthEmulator(authHost, authPort);
 
+      // En web el SDK de Auth llama reCAPTCHA Enterprise incluso en emulador.
+      // Esto falla con API key placeholder. Deshabilitar app verification en tests.
+      if (kIsWeb) {
+        await _auth.setSettings(appVerificationDisabledForTesting: true);
+      }
+
       _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
       _functions.useFunctionsEmulator(functionsHost, functionsPort);
 
