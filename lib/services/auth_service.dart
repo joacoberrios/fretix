@@ -28,7 +28,21 @@ class FretixAuthService {
 
   // Expone un callable usando la instancia configurada (emulador o producción).
   // Toda la app debe usar este método — nunca FirebaseFunctions.instance directamente.
+  //
+  // En web+emulador: useFunctionsEmulator() genera URLs http:// que el browser bloquea
+  // como Mixed Content desde la página HTTPS de Codespaces. Usamos httpsCallableFromUrl
+  // con la URL HTTPS completa del túnel para evitar el bloqueo.
   HttpsCallable getCallable(String name, {Duration timeout = const Duration(seconds: 15)}) {
+    const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
+    if (useEmulator && kIsWeb) {
+      const projectId = 'fretix-dev-jb';
+      const region    = 'us-central1';
+      const tunnelUrl = 'https://redesigned-cod-57x7rq7w9gg37x6g-5001.app.github.dev';
+      return FirebaseFunctions.instance.httpsCallableFromUrl(
+        '$tunnelUrl/$projectId/$region/$name',
+        options: HttpsCallableOptions(timeout: timeout),
+      );
+    }
     return _functions.httpsCallable(
       name,
       options: HttpsCallableOptions(timeout: timeout),
@@ -165,11 +179,9 @@ class FretixAuthService {
     String?                 cuit,
     String?                 nombreComercial,
   }) async {
-    final callable = _functions.httpsCallable(
+    final callable = getCallable(
       'completarOnboardingFretix',
-      options: HttpsCallableOptions(
-        timeout: const Duration(seconds: 30),
-      ),
+      timeout: const Duration(seconds: 30),
     );
 
     // Construir payload — solo incluir campos opcionales si tienen valor.
