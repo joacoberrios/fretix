@@ -4,6 +4,8 @@
 // Spec DEFINITIVA firmada por CPO · CMO · CTO · CEO. Inmutable.
 // Usa FretixColors.accent (Cobre 0xFFD4A373, migrado globalmente en fretix_colors.dart).
 
+import 'dart:math' show sin, cos, asin, sqrt, pi;
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
@@ -165,15 +167,84 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
       // [AUTO-ZOOM] Spec C — solo cuando hay GoogleMap (no en contingencia).
       if (!esContingencia) _autoZoom();
 
-    } on FirebaseFunctionsException catch (e) {
-      // Error REAL de la función — SnackBar en danger (Spec G).
-      // DISTINTO de contingencia, que llega como 200 OK y nunca entra aquí.
-      setState(() => _isLoading = false);
-      _showErrorSnackBar('Error al cotizar: ${e.message ?? e.code}');
+    } on FirebaseFunctionsException catch (_) {
+      const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
+      if (useEmulator) {
+        // En el emulador de Codespaces el preflight CORS falla (bug del emulador v2).
+        // Fallback client-side: misma fórmula Haversine×1.35 que usa el backend.
+        _fallbackEmulador();
+      } else {
+        setState(() => _isLoading = false);
+        _showErrorSnackBar('Error al cotizar. Intentá de nuevo.');
+      }
     } catch (_) {
-      setState(() => _isLoading = false);
-      _showErrorSnackBar('Sin conexión. Intentá de nuevo.');
+      const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
+      if (useEmulator) {
+        _fallbackEmulador();
+      } else {
+        setState(() => _isLoading = false);
+        _showErrorSnackBar('Sin conexión. Intentá de nuevo.');
+      }
     }
+  }
+
+  // Fallback client-side para emulador — mismos coeficientes que /config/tarifas en Firestore.
+  // Solo activo cuando USE_EMULATOR=true y el emulador de Functions no responde CORS.
+  void _fallbackEmulador() {
+    const tarifas = {
+      'mini':  {'base': 1800.0, 'perKm': 350.0, 'perMin': 90.0},
+      'plus':  {'base': 2800.0, 'perKm': 450.0, 'perMin': 120.0},
+      'max':   {'base': 6500.0, 'perKm': 700.0, 'perMin': 180.0},
+      'heavy': {'base': 15000.0,'perKm': 1200.0,'perMin': 250.0},
+    };
+    const comision   = 0.15;
+    const helperFeeM = 5000.0;
+    const factorMendoza = 1.35;
+    const velocidadKmh  = 30.0;
+
+    final tarifa  = tarifas[_selectedCategory]!;
+    final distKm  = double.parse(
+      (_haversineKm(_origen, _destino) * factorMendoza).toStringAsFixed(2),
+    );
+    final durMin  = double.parse(
+      ((distKm / velocidadKmh) * 60).toStringAsFixed(1),
+    );
+
+    final base     = tarifa['base']!;
+    final costoKm  = tarifa['perKm']!  * distKm;
+    final costoMin = tarifa['perMin']! * durMin;
+    final subtotal = base + costoKm + costoMin;
+    final helper   = _hasHelper ? helperFeeM : 0.0;
+    final comisionM = subtotal * comision;
+    final total    = subtotal + comisionM + helper;
+
+    _precioAnterior = _precioActual;
+    _precioActual   = total;
+
+    setState(() {
+      _modoContingencia = true;
+      _isLoading        = false;
+      _cotizacionActual = {
+        'total':       total,
+        'subtotal':    subtotal,
+        'helperFee':   helper,
+        'comisionApp': comisionM,
+        'distanciaKm': distKm,
+        'duracionMin': durMin,
+        'mapsFuente':  'haversine_contingencia',
+      };
+    });
+  }
+
+  // Haversine entre dos puntos geográficos — espejo de la implementación en cotizacion.js.
+  double _haversineKm(LatLng a, LatLng b) {
+    double toRad(double deg) => deg * pi / 180;
+    final dLat = toRad(b.latitude  - a.latitude);
+    final dLng = toRad(b.longitude - a.longitude);
+    final x = sin(dLat / 2) * sin(dLat / 2) +
+              cos(toRad(a.latitude)) * cos(toRad(b.latitude)) *
+              sin(dLng / 2) * sin(dLng / 2);
+    return 2 * 6371 * asin(sqrt(x));
   }
 
   Set<Marker> _buildMarkers() => {
