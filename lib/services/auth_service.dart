@@ -33,16 +33,16 @@ class FretixAuthService {
   // En web+emulador: useFunctionsEmulator() genera URLs http:// que el browser bloquea
   // como Mixed Content desde la página HTTPS de Codespaces. Usamos httpsCallableFromUrl
   // con la URL HTTPS completa del túnel para evitar el bloqueo.
-  HttpsCallable getCallable(String name, {Duration timeout = const Duration(seconds: 15)}) {
+HttpsCallable getCallable(String name, {Duration timeout = const Duration(seconds: 15)}) {
     const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
     if (kIsWeb && useEmulator) {
-      // useFunctionsEmulator() genera URLs http:// → Mixed Content bloqueado desde HTTPS.
-      // Construimos la URL same-origin HTTPS directamente: dev-server.js la proxea a :5001.
-      const host = 'redesigned-cod-57x7rq7w9gg37x6g-3000.app.github.dev';
+      // Entorno actual: frontend servido en HTTP plano (127.0.0.1:3000, sin TLS).
+      // Ya no hay riesgo de Mixed Content, así que apuntamos directo al emulador
+      // local vía HTTP, sin necesidad de túnel HTTPS de Codespaces.
       const projectId = 'fretix-dev-jb';
       const region = 'us-central1';
       return _functions.httpsCallableFromUrl(
-        'https://$host/$projectId/$region/$name',
+        'http://127.0.0.1:5001/$projectId/$region/$name',
         options: HttpsCallableOptions(timeout: timeout),
       );
     }
