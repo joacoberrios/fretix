@@ -31,6 +31,9 @@ dependencies:
   # ── Estado (liviana, sin boilerplate excesivo para este scope) ───────────
   provider:                  ^6.1.2
 
+  # ── Iconos ─────────────────────────────────────────────────────────────────
+  cupertino_icons:           ^1.0.8
+
 
 flutter:
   uses-material-design: true

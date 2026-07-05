@@ -184,7 +184,7 @@ App servida en HTTPS (`*.app.github.dev`). Firebase Auth emulador (9099) funcion
 cd /workspaces/fretix
 firebase emulators:start
 ```
-Puertos: Auth 9099 · Functions 5001 · Firestore 8080
+Puertos: Auth 9099 · Functions 5001 · Firestore 8282
 
 ### Terminal 2 — Build y servidor Flutter web
 ```bash
