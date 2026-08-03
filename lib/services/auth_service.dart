@@ -69,7 +69,7 @@ HttpsCallable getCallable(String name, {Duration timeout = const Duration(second
 
     // Auth — puede fallar en hot-restart ("already configured"), aislado
     try {
-      final authHost = kIsWeb ? 'localhost' : _androidHost();
+      final authHost = kIsWeb ? '127.0.0.1' : _androidHost();
       await _auth.useAuthEmulator(authHost, 9099);
       if (kIsWeb) await _auth.setSettings(appVerificationDisabledForTesting: true);
       debugPrint('[FretixAuth] Auth → $authHost:9099');
@@ -80,7 +80,7 @@ HttpsCallable getCallable(String name, {Duration timeout = const Duration(second
     // Firestore — separado, no depende de que Auth funcione
     try {
       FirebaseFirestore.instance.settings = Settings(
-        host: 'localhost:8282',
+        host: '127.0.0.1:8282',
         sslEnabled: false,
         persistenceEnabled: false,
       );
