@@ -109,7 +109,45 @@ Emuladores usados: Firestore 127.0.0.1:8282 · Auth 127.0.0.1:9099
 
 ---
 
-## TAREA 3 — Módulo 5, diseño inicial Admin Panel (PENDIENTE)
+## TAREA 3 — Módulo 5, diseño inicial Admin Panel ✅ PARCIAL (solo lectura implementada)
+
+**Timestamp**: 2026-08-04
+
+### Propuesta de estructura del Admin Panel
+
+#### Pantallas propuestas
+
+| Pantalla | Ruta | Riesgo | Estado |
+|---|---|---|---|
+| Tarifas — Solo lectura | `/admin/tarifas` | Bajo | ✅ Implementada |
+| Tarifas — Editar | `/admin/tarifas/edit` | Alto (escribe Firestore) | 🔴 PENDIENTE CPO |
+| Config App — Solo lectura | parte de `/admin/tarifas` | Bajo | ✅ Implementada |
+| Config App — Editar comisión/radio | `/admin/config/edit` | Alto | 🔴 PENDIENTE CPO |
+| Audit Log | `/admin/audit` | Medio | 🔴 PENDIENTE CPO |
+| Gestión de usuarios/admins | `/admin/users` | Alto (escribe claims) | 🔴 PENDIENTE CPO |
+
+#### Mecanismo de auditoría propuesto (para aprobación CPO)
+
+Cada cambio de tarifa en producción debe:
+1. Pasar por una Cloud Function `actualizarTarifaFretix` (NO escritura directa del cliente).
+2. La función escribe en `/config/tarifas` Y en `/audit_log/{id}` en la misma transacción.
+3. `audit_log` documento: `{ campo, valorAnterior, valorNuevo, modificadoPor: uid, timestamp, motivo }`.
+4. Firestore rules: `/audit_log` → `allow create: if false` (solo Admin SDK), `allow read: if isAdmin()`.
+
+**Esto requiere aprobación del CPO antes de implementar.** Los campos propuestos para `/audit_log` son nuevos — no implementar hasta aprobación.
+
+#### Notas de diseño
+
+- La pantalla de solo lectura usa `StreamBuilder` → actualización en tiempo real sin botón Refresh.
+- La ruta `/admin/tarifas` existe en `AppRouter` pero el acceso debe restringirse en el router:
+  verificar `request.auth.token.get('role') == 'admin'` antes de navegar (enforcement pendiente).
+- `withOpacity` → `withAlpha(80)` en `_ErrorCard` para evitar deprecation warning.
+
+### Implementado esta sesión
+
+- `lib/screens/admin/admin_tarifas_screen.dart` — vista StreamBuilder de `/config/tarifas` + `/config/app`
+- `lib/router/app_router.dart` — ruta `/admin/tarifas` agregada
+- `flutter analyze`: 0 errors, 0 warnings
 
 ---
 

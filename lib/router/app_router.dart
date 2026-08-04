@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/cotizacion_args.dart';
+import '../screens/admin/admin_tarifas_screen.dart';
 import '../screens/auth/otp_screen.dart';
 import '../screens/auth/phone_input_screen.dart';
 import '../screens/customer/buscando_chofer_screen.dart';
@@ -36,6 +37,9 @@ abstract class AppRouter {
   // ── Compartidas
   static const rating        = '/rating';
 
+  // ── Admin (Módulo 5)
+  static const adminTarifas = '/admin/tarifas';
+
   // ── Web / corporativo
   static const portalCliente    = '/web/cliente';
   static const portalTransporte = '/web/transporte';
@@ -67,6 +71,9 @@ abstract class AppRouter {
 
       case buscandoChofer:
         return _fadeRoute(const BuscandoChoferScreen(), settings);
+
+      case adminTarifas:
+        return _fadeRoute(const AdminTarifasScreen(), settings);
 
       default:
         // Ruta no encontrada — pantalla de error temporal
