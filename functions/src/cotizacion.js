@@ -174,7 +174,11 @@ exports.cotizarViajeFretix = onCall(
   {
     region:          'us-central1',
     enforceAppCheck: false,
-    cors:            true, // permite todos los orígenes — restringir a dominio propio en prod
+    cors: [
+      'https://fretix-dev-jb.web.app',
+      'https://fretix-dev-jb.firebaseapp.com',
+      'http://127.0.0.1:3000',
+    ],
   },
   async (request) => {
 
