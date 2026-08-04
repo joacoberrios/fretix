@@ -64,9 +64,48 @@ Output: flutter test test/widget_test.dart
 
 ---
 
-## TAREA 2 — Tests automatizados para Cloud Functions (EN PROGRESO)
+## TAREA 2 — Tests automatizados para Cloud Functions ✅ COMPLETADA
 
-*Ver siguiente entrada cuando se complete.*
+**Timestamp**: 2026-08-04
+
+### Qué se hizo
+
+Instalado Jest como devDependency en `functions/`. Creados 3 archivos de test:
+
+| Archivo | Tests | Cobertura |
+|---|---|---|
+| `functions/test/setup.js` | — | Helper compartido: initAdmin, clearCollection, createTestUser, seedConfigMinimo |
+| `functions/test/cotizacion.test.js` | 13 tests | Haversine (4), algoritmo de tarifa (4), validaciones de payload (5) |
+| `functions/test/confirmar_viaje.test.js` | 21 tests | Lógica de crédito B2B (12), validaciones payload (3), integración Firestore (6) |
+| `functions/test/onboarding.test.js` | 8 tests | Validaciones payload (5), integración Firestore (3) |
+
+**Estrategia**: Lógica pura testeada unitariamente (sin emulador). Tests de integración escriben/leen del emulador de Firestore via Admin SDK.
+
+### Casos de crédito B2B cubiertos
+
+| Caso | Estado esperado | Test |
+|---|---|---|
+| `macroLimitAudit: null`, `habilitada: false` | BLOQUEA | ✅ |
+| `macroLimitAudit: undefined` (campo ausente) | BLOQUEA | ✅ |
+| `macroLimitAudit: 500000` | APRUEBA | ✅ |
+| `macroLimitAudit: 0` (auditado sin límite) | APRUEBA | ✅ |
+| `habilitada: true`, `\|saldo\| <= límite` | APRUEBA | ✅ |
+| `habilitada: true`, `\|saldo\| > límite` | RECHAZA | ✅ |
+| `habilitada: true`, `saldo == null` | BLOQUEA | ✅ |
+| `habilitada: true`, `límite == null` | BLOQUEA | ✅ |
+| Objeto vacío `{}` | BLOQUEA | ✅ |
+
+### Output del test runner (evidencia real)
+
+```
+Test Suites: 3 passed, 3 total
+Tests:       42 passed, 42 total
+Snapshots:   0 total
+Time:        0.866 s
+Ran all test suites.
+```
+
+Emuladores usados: Firestore 127.0.0.1:8282 · Auth 127.0.0.1:9099
 
 ---
 

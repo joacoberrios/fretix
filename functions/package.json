@@ -2,12 +2,17 @@
   "name": "fretix-functions",
   "description": "Cloud Functions de Fretix",
   "scripts": {
-    "serve":   "firebase emulators:start --only functions",
-    "shell":   "firebase functions:shell",
-    "start":   "npm run shell",
-    "deploy":  "firebase deploy --only functions",
-    "logs":    "firebase functions:log",
-    "db:seed": "node src/seed.js"
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "db:seed": "node src/seed.js",
+    "test": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8282 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 jest --runInBand --testTimeout=20000"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/test/**/*.test.js"]
   },
   "engines": {
     "node": "22"
@@ -18,5 +23,10 @@
     "firebase-admin": "^12.0.0",
     "firebase-functions": "^6.0.0"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "firebase-functions-test": "^3.5.0",
+    "jest": "^30.4.2"
+  }
 }
