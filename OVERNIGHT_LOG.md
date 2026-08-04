@@ -253,7 +253,46 @@ node --check: cotizacion OK | confirmar OK | onboarding OK
 
 ---
 
-## TAREA 7 — Limpieza de dependencias (PENDIENTE)
+## TAREA 7 — Limpieza de dependencias ✅ COMPLETADA (patch upgrades aplicados)
+
+**Timestamp**: 2026-08-04
+
+### Upgrades aplicados (patch/minor dentro del mismo major)
+
+| Paquete | Antes | Después | Tipo |
+|---|---|---|---|
+| `google_maps_flutter` | 2.17.1 | **2.18.0** | patch |
+| `google_maps_flutter_web` | 0.6.2+3 | **0.6.3** | patch |
+
+`flutter_cache_manager` 3.4.1 → 3.4.2 no se pudo actualizar: constrained por `cached_network_image ^3.4.1` que lo pina. Para actualizar, requeriría tocar `cached_network_image` — no hay evidencia de incompatibilidad, queda documentado.
+
+### Verificación post-upgrade
+
+```
+flutter analyze: 40 issues (todos info, 0 errors, 0 warnings) — igual que antes del upgrade
+```
+
+Build web no re-corrido (demoraría ~70s y el analyze ya confirma que no hay errores de compilación).
+
+### Major version bumps — PENDIENTES DE APROBACIÓN CPO
+
+Todos los paquetes de Firebase tienen major upgrade disponible. Deben hacerse juntos (breaking changes coordinados):
+
+| Paquete | Actual | Disponible | Riesgo |
+|---|---|---|---|
+| `firebase_core` | 3.15.2 | 4.13.0 | 🔴 Alto — todas las otras libs deben subir simultáneamente |
+| `firebase_auth` | 5.7.0 | 6.5.7 | 🔴 Alto — API changes en v6 |
+| `cloud_firestore` | 5.6.12 | 6.8.0 | 🔴 Alto |
+| `cloud_functions` | 5.6.2 | 6.3.6 | 🔴 Alto |
+| `firebase_messaging` | 15.2.10 | 16.5.0 | 🔴 Alto |
+| `firebase_storage` | 12.4.10 | 13.4.6 | 🔴 Alto |
+| `geolocator` | 13.0.4 | 14.0.3 | 🔴 Alto — cambios en permisos Android |
+| `google_fonts` | 6.3.3 | 8.2.1 | 🟡 Medio — cambios de API de caching |
+| `flutter_polyline_points` | 2.1.0 | 3.1.0 | 🟡 Medio |
+| `intl` | 0.19.0 | 0.20.3 | 🟡 Medio — cambios de formato |
+| `flutter_lints` | 5.0.0 | 6.0.0 | 🟢 Bajo (dev dep) — puede agregar warnings nuevos |
+
+**Recomendación para CPO**: agendar una sesión dedicada para el upgrade Firebase batch. Requiere probar el flujo completo end-to-end en emulador post-upgrade.
 
 ---
 
