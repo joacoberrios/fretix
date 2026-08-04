@@ -113,7 +113,12 @@ exports.completarOnboardingFretix = onCall(
 
     // ── Ruta A: Usuario simple (particular o chofer independiente) ────────────
     if (!esEmpresa) {
-      await userRef.set(userDoc);
+      try {
+        await userRef.set(userDoc);
+      } catch (err) {
+        console.error('[onboarding] Error escribiendo /users en Firestore:', err.message);
+        throw new HttpsError('unavailable', 'No se pudo guardar tu perfil. Intentá de nuevo.');
+      }
       return { success: true, uid, role };
     }
 
@@ -187,11 +192,16 @@ exports.completarOnboardingFretix = onCall(
       isActive:  true,
     };
 
-    await db.runTransaction(async (transaction) => {
-      transaction.set(userRef,    userDoc);
-      transaction.set(companyRef, companyDoc);
-      transaction.set(memberRef,  memberDoc);
-    });
+    try {
+      await db.runTransaction(async (transaction) => {
+        transaction.set(userRef,    userDoc);
+        transaction.set(companyRef, companyDoc);
+        transaction.set(memberRef,  memberDoc);
+      });
+    } catch (err) {
+      console.error('[onboarding] Error en transacción Firestore empresa:', err.message);
+      throw new HttpsError('unavailable', 'No se pudo crear la empresa. Intentá de nuevo.');
+    }
 
     return {
       success:   true,

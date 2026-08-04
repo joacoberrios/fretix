@@ -219,10 +219,16 @@ exports.cotizarViajeFretix = onCall(
     }
 
     // ── 3. Leer configuración desde Firestore (runtime) ───────────────────────
-    const [tarifasSnap, appSnap] = await Promise.all([
-      db.collection('config').doc('tarifas').get(),
-      db.collection('config').doc('app').get(),
-    ]);
+    let tarifasSnap, appSnap;
+    try {
+      [tarifasSnap, appSnap] = await Promise.all([
+        db.collection('config').doc('tarifas').get(),
+        db.collection('config').doc('app').get(),
+      ]);
+    } catch (err) {
+      console.error('[cotizar] Error leyendo /config de Firestore:', err.message);
+      throw new HttpsError('unavailable', 'Configuración de tarifas no disponible. Intentá de nuevo.');
+    }
 
     if (!tarifasSnap.exists) {
       throw new HttpsError(

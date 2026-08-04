@@ -151,11 +151,64 @@ Cada cambio de tarifa en producción debe:
 
 ---
 
-## TAREA 4 — Módulo 4.3: flujo empresa en onboarding (PENDIENTE)
+## TAREA 4 — Módulo 4.3: flujo empresa en onboarding ✅ YA IMPLEMENTADO
+
+**Timestamp**: 2026-08-04
+
+### Hallazgo: el flujo empresa en onboarding está completo
+
+Auditada `lib/screens/onboarding/role_selection_screen.dart`. El formulario de empresa **ya existe** y funciona:
+
+- **Paso 2**: el carrusel de roles muestra los 4 roles incluyendo `clienteEmpresaMaestro` (línea 368) y `empresaTransporteMaestro` (línea 385).
+- **`_esEmpresa`** (línea 104): computed property → `_rolElegido?.requiereDatosFiscales ?? false` — se activa correctamente para ambos roles empresa.
+- **Paso 3**: cuando `_esEmpresa == true`, el formulario expande un bloque animado con:
+  - `razonSocialCtrl` — campo obligatorio, mínimo 3 chars (línea 498)
+  - `cuitCtrl` — campo obligatorio, validación 11 dígitos (línea 517)
+  - `nombreComercCtrl` — campo opcional (línea 529)
+- **Envío**: `_confirmar()` pasa los 3 campos a `ejecutarOnboardingBackend` (líneas 121-125).
+- **Backend**: `completarOnboardingFretix` crea `/users + /companies + /company_members` en transacción atómica para roles empresa (verificado en `onboarding.js` y en los tests de Tarea 2).
+
+**No hay nada que implementar.** Módulo 4.3 ya está completo end-to-end.
 
 ---
 
-## TAREA 5 — Auditoría de manejo de errores en Cloud Functions (PENDIENTE)
+## TAREA 5 — Auditoría de manejo de errores en Cloud Functions ✅ COMPLETADA
+
+**Timestamp**: 2026-08-04
+
+### Gaps encontrados y clasificados
+
+| Función | Gap | Severidad | Acción |
+|---|---|---|---|
+| `confirmar_viaje.js` | Sin try/catch en `viajes.add()` — Firestore caído = internal error | **Crítico** | ✅ Corregido |
+| `confirmar_viaje.js` | Sin try/catch en `companies.doc().get()` B2B — Firestore caído = internal error | **Crítico** | ✅ Corregido |
+| `onboarding.js` | Sin try/catch en `runTransaction()` — Firestore caído = internal error | **Crítico** | ✅ Corregido |
+| `cotizacion.js` | Sin try/catch en `Promise.all([tarifas, app])` — Firestore caído = internal error | **Medio** | ✅ Corregido |
+| `cotizacion.js` | Google Maps 429/timeout no distinguidos en logs | **Bajo** | Solo documentado |
+| `confirmar_viaje.js` | `!d.origen?.lat` rechaza lat=0 (meridiano primero — irrelevante para Mendoza, bug latente) | **Bajo** | Solo documentado |
+| `cotizacion.js` | `ayudante: "si"` (string) silenciosamente ignora el campo | **Bajo** | Solo documentado |
+
+### Correcciones implementadas
+
+En los 3 casos críticos, patrón aplicado:
+```js
+try {
+  // operación Firestore
+} catch (err) {
+  if (err instanceof HttpsError) throw err;  // re-lanzar errores propios
+  console.error('[función] Error:', err.message);
+  throw new HttpsError('unavailable', 'Mensaje amigable. Intentá de nuevo.');
+}
+```
+
+El `if (err instanceof HttpsError) throw err` es crítico para evitar que un `HttpsError` lanzado dentro del bloque try se re-envuelva en "unavailable".
+
+### Evidencia
+
+```
+Tests: 42 passed, 42 total — después de los cambios
+node --check: cotizacion OK | confirmar OK | onboarding OK
+```
 
 ---
 

@@ -36,7 +36,13 @@ exports.confirmarViajeFretix = onCall(
     if (!d.companyId) {
       throw new HttpsError('invalid-argument', 'companyId requerido para clientes empresa.');
     }
-    const companySnap = await db.collection('companies').doc(d.companyId).get();
+    let companySnap;
+    try {
+      companySnap = await db.collection('companies').doc(d.companyId).get();
+    } catch (err) {
+      console.error('[confirmar] Error leyendo empresa de Firestore:', err.message);
+      throw new HttpsError('unavailable', 'Servicio temporalmente no disponible. Intentá de nuevo.');
+    }
     if (!companySnap.exists) {
       throw new HttpsError('not-found', `Empresa ${d.companyId} no encontrada.`);
     }
@@ -59,7 +65,9 @@ exports.confirmarViajeFretix = onCall(
     }
   }
 
-  const docRef = await db.collection('viajes').add({
+  let docRef;
+  try {
+    docRef = await db.collection('viajes').add({
     clienteUid:    uid,
     clientType:    d.clientType ?? 'particular',
     estado:        'pending',
@@ -83,6 +91,11 @@ exports.confirmarViajeFretix = onCall(
     },
     creadoEn: FieldValue.serverTimestamp(),
   });
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    console.error('[confirmar] Error escribiendo viaje en Firestore:', err.message);
+    throw new HttpsError('unavailable', 'No se pudo crear el viaje. Intentá de nuevo.');
+  }
 
   return { viajeId: docRef.id };
   },
