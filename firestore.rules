@@ -26,13 +26,6 @@ service cloud.firestore {
       return hasRole('admin');
     }
 
-    // El usuario es miembro activo de la empresa indicada
-    // (se verifica leyendo /company_members — solo para reglas simples)
-    function isMemberOf(companyId) {
-      return isAuth() &&
-        exists(/databases/$(database)/documents/company_members/$(request.auth.uid + '_' + companyId));
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // /users/{userId}
     // ─────────────────────────────────────────────────────────────────────────
@@ -206,12 +199,9 @@ service cloud.firestore {
         isAdmin()
       );
 
-      // Creación desde el cliente: solo estado 'pending' y solo cliente particular.
-      // B2B (clientType='empresa') pasa por Cloud Function que valida crédito primero.
-      allow create: if isAuth()
-        && request.resource.data.estado     == 'pending'
-        && request.resource.data.clienteUid == request.auth.uid
-        && request.resource.data.clientType == 'particular';
+      // Creación: solo Cloud Functions vía Admin SDK (bypasea estas reglas).
+      // confirmarViajeFretix valida crédito, payload y estado antes de escribir.
+      allow create: if false;
 
       // Actualización de estado: NUNCA desde el cliente — solo Cloud Functions.
       allow update: if false;
