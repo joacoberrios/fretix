@@ -5,7 +5,16 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const CATEGORIAS_VALIDAS = new Set(['mini', 'plus', 'max', 'heavy']);
 
-exports.confirmarViajeFretix = onCall(async (request) => {
+exports.confirmarViajeFretix = onCall(
+  {
+    region: 'us-central1',
+    cors: [
+      'https://fretix-dev-jb.web.app',
+      'https://fretix-dev-jb.firebaseapp.com',
+      'http://127.0.0.1:3000',
+    ],
+  },
+  async (request) => {
   const db  = getFirestore(); // lazy: después de que FIRESTORE_EMULATOR_HOST esté seteado
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Se requiere autenticación.');
@@ -20,6 +29,34 @@ exports.confirmarViajeFretix = onCall(async (request) => {
   }
   if (typeof d.cotizacion?.total !== 'number' || d.cotizacion.total <= 0) {
     throw new HttpsError('invalid-argument', 'Cotización inválida.');
+  }
+
+  // ── Validación de crédito B2B (solo clientes empresa) ─────────────────────
+  if (d.clientType === 'empresa') {
+    if (!d.companyId) {
+      throw new HttpsError('invalid-argument', 'companyId requerido para clientes empresa.');
+    }
+    const companySnap = await db.collection('companies').doc(d.companyId).get();
+    if (!companySnap.exists) {
+      throw new HttpsError('not-found', `Empresa ${d.companyId} no encontrada.`);
+    }
+    const cc = companySnap.data().cuentaCorriente ?? {};
+    const habilitada       = cc.habilitada       ?? false;
+    const macroLimitAudit  = cc.macroLimitAudit  ?? null;
+    const saldoActualARS   = cc.saldoActualARS   ?? null;
+    const limiteCreditoARS = cc.limiteCreditoARS ?? null;
+
+    let creditOk = false;
+    if (!habilitada) {
+      creditOk = macroLimitAudit !== null;
+    } else {
+      if (saldoActualARS !== null && limiteCreditoARS !== null) {
+        creditOk = Math.abs(saldoActualARS) <= limiteCreditoARS;
+      }
+    }
+    if (!creditOk) {
+      throw new HttpsError('failed-precondition', 'Crédito insuficiente o no auditado.');
+    }
   }
 
   const docRef = await db.collection('viajes').add({
@@ -48,4 +85,5 @@ exports.confirmarViajeFretix = onCall(async (request) => {
   });
 
   return { viajeId: docRef.id };
-});
+  },
+);

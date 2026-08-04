@@ -99,12 +99,18 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
 
   bool _isConfirming = false;
 
+  // Contexto de crédito B2B — null = no resuelto/error → default-secure: bloquea.
+  String?               _clientType;  // 'particular' | 'empresa' | null
+  String?               _companyId;
+  Map<String, dynamic>? _creditData;  // cuentaCorriente del company
+
   @override
   void initState() {
     super.initState();
     _origen  = widget.args?.origen  ?? _kOrigenMock;
     _destino = widget.args?.destino ?? _kDestinoMock;
     _cotizar();
+    _loadUserCreditContext();
   }
 
   @override
@@ -297,6 +303,52 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
     ));
   }
 
+  Future<void> _loadUserCreditContext() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return; // sin auth → _clientType sigue null → bloquea
+
+    try {
+      final userSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final onboardingRole = userSnap.data()?['onboardingRole'] as String?;
+
+      if (onboardingRole != 'cliente_empresa_maestro') {
+        if (mounted) setState(() => _clientType = 'particular');
+        return;
+      }
+
+      // Empresa → buscar companyId en /company_members
+      final memberSnap = await FirebaseFirestore.instance
+          .collection('company_members')
+          .where('userId', isEqualTo: uid)
+          .limit(1)
+          .get();
+
+      if (memberSnap.docs.isEmpty) return; // anomalía → _clientType null → bloquea
+
+      final companyId = memberSnap.docs.first.data()['companyId'] as String?;
+      if (companyId == null) return; // dato corrupto → bloquea
+
+      final companySnap = await FirebaseFirestore.instance
+          .collection('companies')
+          .doc(companyId)
+          .get();
+      final cc = companySnap.data()?['cuentaCorriente'] as Map<String, dynamic>?;
+
+      if (mounted) {
+        setState(() {
+          _clientType = 'empresa';
+          _companyId  = companyId;
+          _creditData = cc; // null aquí → puedeConfirmarPorCredito bloqueará
+        });
+      }
+    } catch (_) {
+      // Cualquier falla de red/Firestore → _clientType sigue null → bloquea.
+    }
+  }
+
   // ── [CONFIRMAR VIAJE] Llama a confirmarViajeFretix (Cloud Function) que
   // escribe /viajes/{id} desde el servidor. Evita el WebChannel de Firestore,
   // incompatible con el tunnel HTTPS de Codespaces.
@@ -311,7 +363,8 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
         timeout: const Duration(seconds: 20),
       );
       await callable.call({
-        'clientType':    'particular',
+        'clientType':    _clientType!,   // seguro: botón deshabilitado mientras null
+        if (_clientType == 'empresa') 'companyId': _companyId!,
         'pricingMethod': _cotizacionActual!['mapsFuente'] ?? 'haversine_contingencia',
         'categoria':     _selectedCategory,
         'ayudante':      _hasHelper,
@@ -369,14 +422,13 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
 
   // ── [SPEC H] Validación de crédito B2B — hook listo para Módulo 4 ─────────
   //
-  // Campos Firestore ya existentes (onboarding.js, Módulo 2):
-  //   companies/{id}.cuentaCorriente.saldoActualARS
-  //   companies/{id}.cuentaCorriente.limiteCreditoARS
+  // Mapeo Firestore confirmado (onboarding.js, líneas 139-147):
+  //   creditCheckEnabled → cuentaCorriente.habilitada
+  //   saldoActualARS     → cuentaCorriente.saldoActualARS
+  //   limiteCreditoARS   → cuentaCorriente.limiteCreditoARS
+  //   macroLimitAudit    → cuentaCorriente.macroLimitAudit (campo nuevo, CPO Módulo 4.1)
   //
   // TODO(Módulo 4): leer /companies/{companyId} en tiempo real y pasar los valores.
-  // TODO(CTO): confirmar en el esquema de /companies si 'creditCheckEnabled' y
-  // 'macroLimitAudit' se modelan como campos nuevos o se mapean a los campos existentes
-  // de cuentaCorriente. No inventar campos en Firestore desde este archivo de UI.
 
   /// Evalúa si la empresa puede confirmar el viaje según su cuenta corriente.
   /// PRINCIPIO DE DEFAULT SEGURO: cualquier dato nulo o inconsistente → riesgo máximo → bloquear.
@@ -396,6 +448,19 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
     // Validación en caliente: saldo no puede superar el límite habilitado.
     if (saldoActualARS == null || limiteCreditoARS == null) return false;
     return saldoActualARS.abs() <= limiteCreditoARS;
+  }
+
+  bool _creditPermitido() {
+    if (_clientType == null) return false;          // resolviendo o error → bloquea
+    if (_clientType == 'particular') return true;   // sin validación de crédito
+    if (_creditData == null) return false;          // empresa sin datos → bloquea
+    final cc = _creditData!;
+    return puedeConfirmarPorCredito(
+      creditCheckEnabled: cc['habilitada']       as bool?   ?? false,
+      saldoActualARS:    (cc['saldoActualARS']   as num?)?.toDouble(),
+      limiteCreditoARS:  (cc['limiteCreditoARS'] as num?)?.toDouble(),
+      macroLimitAudit:   (cc['macroLimitAudit']  as num?)?.toDouble(),
+    );
   }
 
   // ── BUILD ──────────────────────────────────────────────────────────────────
@@ -456,7 +521,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                 formatPeso:        _formatPeso,
                 onCategoryChanged: _onCategoryChanged,
                 onHelperChanged:   _onHelperChanged,
-                puedeConfirmar:    _cotizacionActual != null && !_isLoading,
+                puedeConfirmar:    _cotizacionActual != null && !_isLoading && _creditPermitido(),
                 onConfirmar:       _confirmarViaje,
               ),
             ),

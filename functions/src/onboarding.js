@@ -50,7 +50,11 @@ exports.completarOnboardingFretix = onCall(
   {
     region:          'us-central1',
     enforceAppCheck: false,
-    cors:            true,
+    cors: [
+      'https://fretix-dev-jb.web.app',
+      'https://fretix-dev-jb.firebaseapp.com',
+      'http://127.0.0.1:3000',
+    ],
   },
   async (request) => {
     // ── Validación de autenticación ──────────────────────────────────────────
@@ -143,6 +147,7 @@ exports.completarOnboardingFretix = onCall(
           saldoActualARS:      0,
           diasCredito:         15,
           proximoVencimiento:  null,
+          macroLimitAudit:     null,   // null = sin auditar → bloquea por default seguro
         },
         facturacion: {
           tipoFactura:      'A',
