@@ -1,6 +1,6 @@
 # FRETIX — Bitácora de Desarrollo
 
-> Última actualización: 2026-06-30 (Módulo 3 cerrado)  
+> Última actualización: 2026-08-03 (Módulo 4.2 cerrado · fix seguridad /viajes)  
 > Repositorio: https://github.com/joacoberrios/fretix  
 > Branch principal: `main`
 
@@ -92,6 +92,7 @@ functions/
 ├── src/
 │   ├── onboarding.js                  ✅ completarOnboardingFretix (v2 onCall, escribe /users/{uid})
 │   ├── cotizacion.js                  ✅ cotizarViajeFretix — Google Maps + fallback Haversine + motor de tarifas
+│   ├── confirmar_viaje.js             ✅ confirmarViajeFretix — validación crédito B2B + crea /viajes/{id}
 │   └── seed.js                        ✅ Seed /config/tarifas y /config/app para emulador (npm run db:seed)
 └── package.json                       ✅ node 22, firebase-functions, firebase-admin, axios
 firebase.json                          ✅ Auth:9099, Functions:5001, Firestore:8080, nodejs22
@@ -156,7 +157,7 @@ App servida en HTTPS (`*.app.github.dev`). Firebase Auth emulador (9099) funcion
 - [x] Cálculo de tarifa con fórmula (lee `/config/tarifas` en runtime desde Firestore)
 - [x] Pantalla de resumen de cotización con desglose (precio animado, carrusel, switch ayudante)
 - [ ] Input origen/destino con Google Maps Places Autocomplete — pendiente MapsService (Módulo 4)
-- [ ] Botón "Confirmar pedido" funcional → crea documento en Firestore `/viajes/{id}` — pendiente Módulo 4
+- [x] Botón "Confirmar pedido" funcional → Cloud Function `confirmarViajeFretix` crea `/viajes/{id}` ✅ (backend + frontend completos, validación de crédito B2B activa)
 
 ### Prioridad 2 — Matcheo de choferes
 - [ ] Cloud Function `buscarChoferesDisponibles` → query Firestore choferes con `disponible=true` en radio 5km
@@ -204,6 +205,41 @@ curl -X PATCH "http://localhost:9099/emulator/v1/projects/fretix-dev-jb/config" 
 ```
 https://redesigned-cod-57x7rq7w9gg37x6g-3000.app.github.dev
 ```
+
+---
+
+### Fix seguridad — `/viajes/{viajeId}` create cerrado: 2026-08-03
+
+Cerrado hueco de seguridad en `/viajes/{viajeId}` — `create` ya no permite escritura directa desde cliente particular; todo pasa exclusivamente por `confirmarViajeFretix` (Admin SDK). El path directo existía como diseño previo a que la Cloud Function cubriera ambos tipos de cliente; no estaba documentado como intencional. `update` y `delete` ya eran `if false`. Archivo modificado: `firestore.rules`.
+
+---
+
+### Módulo 4.2 — Conexión hook crédito B2B a Firestore: CIERRE 2026-08-03
+
+**Implementado:**
+- `_loadUserCreditContext()` en `_CotizacionScreenState`: lee `/users/{uid}.onboardingRole` para determinar el tipo de cliente, y si es `cliente_empresa_maestro` encadena una lectura a `/company_members` (para obtener `companyId`) y luego a `/companies/{companyId}` (para obtener `cuentaCorriente`). Todo one-shot en `initState`.
+- `_creditPermitido()`: evalúa `puedeConfirmarPorCredito` con datos reales de Firestore. Retorna `false` explícito cuando `_clientType == null` (resolviendo, error de red, `/company_members` vacío, o dato corrupto) — nunca asume `'particular'` por defecto.
+- `_confirmarViaje()`: payload actualizado para enviar `clientType` real (`'particular'` o `'empresa'`) y `companyId` cuando corresponde. El backend ya validaba; ahora el frontend también determina y comunica el tipo correctamente.
+- `puedeConfirmar` en `build()` incorpora `_creditPermitido()` como tercer predicado.
+
+**Archivos tocados:** `lib/screens/customer/cotizacion_screen.dart`
+
+**Verificado en runtime:** flujo completo Auth OTP → cotización → confirmar viaje → pantalla `buscandoChofer` funcionando en emulador local (2026-08-03).
+
+**Pendiente (Módulo 5):** pantalla `buscandoChofer` es placeholder — falta `buscarChoferesDisponibles` Cloud Function y flujo de matcheo con el chofer.
+
+---
+
+### Módulo 4.1 — Validación de crédito B2B: CIERRE 2026-08-03
+
+**Implementado:**
+- Campo `macroLimitAudit: null` agregado a `cuentaCorriente` en la inicialización de empresas tipo `customer` (`functions/src/onboarding.js`). Valor `null` = sin auditar → bloquea por default seguro.
+- Mapeo de campos confirmado y documentado en `lib/screens/customer/cotizacion_screen.dart` (TODO(CTO) resuelto): `creditCheckEnabled → habilitada`, `saldoActualARS/limiteCreditoARS` directos, `macroLimitAudit` campo nuevo.
+- Validación de crédito B2B en `functions/src/confirmar_viaje.js`: antes de crear `/viajes/{id}`, si `clientType === 'empresa'` se lee `/companies/{companyId}` y se replica exactamente la lógica de `puedeConfirmarPorCredito` del frontend — mismo principio de default seguro (dato ausente = bloquear).
+
+**Archivos tocados:** `functions/src/onboarding.js` · `functions/src/confirmar_viaje.js` · `lib/screens/customer/cotizacion_screen.dart`
+
+**Pendiente (Módulo 4.2):** el frontend todavía no lee `/companies/{id}` en tiempo real para pasarle los valores reales a `puedeConfirmarPorCredito`. El hook existe y la lógica es correcta, pero se invoca con datos null/dummy. El backend ya valida; el hook del cliente aún no está conectado a Firestore.
 
 ---
 
