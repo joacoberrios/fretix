@@ -1,5 +1,9 @@
 import 'dart:async';
+// ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html show window, DivElement;
+// TODO(migrate): reemplazar dart:js_util + dart:html por dart:js_interop + package:web
+// cuando se actualicen los packages de Flutter Web Maps. Ver OVERNIGHT_LOG.md.
+// ignore: avoid_web_libraries_in_flutter, uri_does_not_exist
 import 'dart:js_util' as js_util;
 
 import 'package:flutter/material.dart';

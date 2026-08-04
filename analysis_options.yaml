@@ -1,0 +1,16 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - "**/*.g.dart"
+  errors:
+    # dart:js_util está deprecado en favor de dart:js_interop — migration pendiente.
+    # El build web sigue funcionando; rewrite programado en OVERNIGHT_LOG.md.
+    uri_does_not_exist: ignore
+
+linter:
+  rules:
+    avoid_print: true
+    prefer_const_constructors: true
+    prefer_const_declarations: true

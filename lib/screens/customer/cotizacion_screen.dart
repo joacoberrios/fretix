@@ -76,7 +76,6 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
   bool     _hasHelper         = false;
   bool     _isLoading         = false;
   Map<String, dynamic>? _cotizacionActual;
-  Polyline? _rutaPolyline;
   // Inicia en true: el mapa solo se muestra si el backend confirma mapsFuente=google_maps.
   // Esto evita el crash de GoogleMap en web cuando no hay API key en index.html.
   bool     _modoContingencia  = true;
@@ -86,10 +85,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
   double _precioAnterior = 0;
 
   // ── [ESTADO] Mapa
-  // _mapDisponible: false cuando Google Maps crashea sin API key (modo web sin clave).
-  // En ese caso la pantalla parte directo en modoContingencia.
   GoogleMapController? _mapController;
-  bool          _mapDisponible = true;
   Set<Marker>   _markers   = {};
   Set<Polyline> _polylines = {};
 
@@ -173,7 +169,6 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
       setState(() {
         _cotizacionActual = data;
         _modoContingencia = esContingencia;
-        _rutaPolyline     = newPolylines.isNotEmpty ? newPolylines.first : null;
         _polylines        = newPolylines;
         _markers          = _buildMarkers();
         _isLoading        = false;
