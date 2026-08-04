@@ -50,3 +50,8 @@ functions/node_modules/
 emulator-data/
 *-debug.log
 node_modules/
+
+# Secrets — nunca commitear
+functions/.env
+.env
+.env.local
