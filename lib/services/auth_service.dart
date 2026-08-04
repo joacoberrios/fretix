@@ -29,16 +29,11 @@ class FretixAuthService {
 
   // Expone un callable usando la instancia configurada (emulador o producción).
   // Toda la app debe usar este método — nunca FirebaseFunctions.instance directamente.
-  //
-  // En web+emulador: useFunctionsEmulator() genera URLs http:// que el browser bloquea
-  // como Mixed Content desde la página HTTPS de Codespaces. Usamos httpsCallableFromUrl
-  // con la URL HTTPS completa del túnel para evitar el bloqueo.
-HttpsCallable getCallable(String name, {Duration timeout = const Duration(seconds: 15)}) {
+  HttpsCallable getCallable(String name, {Duration timeout = const Duration(seconds: 15)}) {
     const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
     if (kIsWeb && useEmulator) {
-      // Entorno actual: frontend servido en HTTP plano (127.0.0.1:3000, sin TLS).
-      // Ya no hay riesgo de Mixed Content, así que apuntamos directo al emulador
-      // local vía HTTP, sin necesidad de túnel HTTPS de Codespaces.
+      // useFunctionsEmulator() no funciona en web; httpsCallableFromUrl apunta
+      // directamente al emulador local en HTTP (el frontend también corre en HTTP).
       const projectId = 'fretix-dev-jb';
       const region = 'us-central1';
       return _functions.httpsCallableFromUrl(

@@ -180,7 +180,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
     } on FirebaseFunctionsException catch (_) {
       const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
       if (useEmulator) {
-        // En el emulador de Codespaces el preflight CORS falla (bug del emulador v2).
+        // CORS preflight puede fallar contra el emulador local (bug del emulador v2).
         // Fallback client-side: misma fórmula Haversine×1.35 que usa el backend.
         _fallbackEmulador();
       } else {
@@ -345,8 +345,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
   }
 
   // ── [CONFIRMAR VIAJE] Llama a confirmarViajeFretix (Cloud Function) que
-  // escribe /viajes/{id} desde el servidor. Evita el WebChannel de Firestore,
-  // incompatible con el tunnel HTTPS de Codespaces.
+  // escribe /viajes/{id} desde el servidor.
   Future<void> _confirmarViaje() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _cotizacionActual == null) return;

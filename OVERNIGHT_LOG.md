@@ -296,12 +296,89 @@ Todos los paquetes de Firebase tienen major upgrade disponible. Deben hacerse ju
 
 ---
 
-## TAREA 8 — README.md para developers (PENDIENTE)
+## TAREA 8 — README.md para developers ✅ COMPLETADA
+
+**Timestamp**: 2026-08-04
+
+### Qué se hizo
+
+Creado `README.md` en la raíz del proyecto documentando el entorno real verificado en esta sesión.
+
+### Contenido del README
+
+| Sección | Detalle |
+|---|---|
+| Requisitos | Java OpenJDK 21.0.11, Node v22.23.2, Firebase CLI 15.22.4, Python 3.14.6, Flutter 3.44.4/Dart 3.12.2 |
+| Flutter path | `/Users/joaquinberrios/Documents/flutter/bin/flutter` (no está en PATH global) |
+| Levantar emuladores | `firebase emulators:start` → Auth:9099, Functions:5001, Firestore:8282, Hub:4400 |
+| Dev server | `node dev-server.js` → http://127.0.0.1:3000 |
+| Flutter web | `flutter run -d chrome --dart-define=USE_EMULATOR=true` |
+| Build producción | `flutter build web --release` + `firebase deploy --only hosting` |
+| Tests Flutter | `flutter test test/widget_test.dart` → 6 tests |
+| Tests Functions | `cd functions && npm test` → 42 tests |
+| Variables de entorno | `functions/.env` con `MAPS_API_KEY` (en .gitignore) |
+| Rama y divergencia | `overnight-work-20260803`; main local diverge de origin/main — no merge sin revisión |
+
+Solo se documentaron pasos verificados en esta sesión. No se inventaron pasos hipotéticos.
 
 ---
 
-## TAREA 9 — Naming y consistencia de código (PENDIENTE)
+## TAREA 9 — Naming y consistencia de código ✅ COMPLETADA
+
+**Timestamp**: 2026-08-04
+
+### Auditoría realizada
+
+Archivos auditados: `lib/services/auth_service.dart`, `lib/screens/customer/cotizacion_screen.dart`, `lib/screens/customer/search_location_screen.dart`, `lib/screens/onboarding/role_selection_screen.dart`, `functions/src/*.js`.
+
+### Hallazgos y correcciones
+
+| Archivo | Hallazgo | Acción |
+|---|---|---|
+| `auth_service.dart` | Comentario `getCallable()` mencionaba "Mixed Content" y "túnel HTTPS de Codespaces" — entorno ya es Mac local | ✅ Reescrito: ahora explica el workaround técnico sin contexto stale |
+| `cotizacion_screen.dart:183` | Comentario "preflight CORS falla en emulador de Codespaces" | ✅ Simplificado: quitada la mención de Codespaces |
+| `cotizacion_screen.dart:349` | Comentario "_confirmarViaje: evita WebChannel incompatible con tunnel de Codespaces" | ✅ Simplificado: solo dice que escribe desde el servidor |
+| `functions/src/*.js` | Naming de exports: `cotizarViajeFretix`, `confirmarViajeFretix`, `completarOnboardingFretix` | ✅ OK — consistente camelCase español |
+| `lib/screens/` y `lib/services/` | Mezcla inglés/español en nombres internos | ✅ OK — `getCallable`, `signOut`, `signInWithCode` son nombres de interfaz de Firebase; lógica propia es en español |
+
+### Flutter analyze post-cambios
+
+```
+40 issues found — todos info (sin errores ni warnings) — igual que antes
+```
+
+Sin regresiones introducidas.
 
 ---
 
-*Log creado: 2026-08-03. Actualizar tras cada tarea completada.*
+---
+
+## RESUMEN EJECUTIVO — Cierre de sesión 2026-08-04
+
+### Estado final
+
+| Tarea | Estado | Notas |
+|---|---|---|
+| 1 — Deuda técnica | ✅ Completada | 0 errors, 0 warnings en flutter analyze |
+| 2 — Tests Cloud Functions | ✅ Completada | 42 tests Jest, 3 suites |
+| 3 — Admin Panel Módulo 5 | ✅ Parcial (solo lectura) | Edición pendiente CPO |
+| 4 — Flujo empresa onboarding | ✅ Ya implementado | Auditoría confirma end-to-end OK |
+| 5 — Error handling Functions | ✅ Completada | 3 gaps críticos corregidos |
+| 6 — Accesibilidad | ✅ Parcial | Touch targets corregidos; textMuted falla WCAG AA (CPO) |
+| 7 — Dependencias | ✅ Parcial | Patch upgrades aplicados; major bumps pendientes CPO |
+| 8 — README.md | ✅ Completada | Basado en herramientas verificadas en sesión |
+| 9 — Naming/consistencia | ✅ Completada | Comentarios Codespaces eliminados |
+
+### Decisiones pendientes para el CPO
+
+1. **Migración `dart:js_interop` + `package:web`** — `search_location_screen.dart` usa APIs deprecadas. Stopgap activo.
+2. **Pantallas de edición del Admin Panel** — `/admin/tarifas/edit`, `/admin/config/edit` (requieren Cloud Function `actualizarTarifaFretix` + colección `audit_log`).
+3. **textMuted (#444444)** — falla WCAG AA (2.5:1). ¿Es intencional como texto decorativo o debe cambiar a `textSecondary`?
+4. **Major version bumps Firebase** — todos los paquetes Firebase tienen major upgrade disponible. Sesión dedicada recomendada.
+5. **Acceso de ruta `/admin/tarifas`** — enforcement de rol admin en router pendiente.
+
+### Rama de trabajo
+
+Todo el trabajo de esta sesión está en `overnight-work-20260803`. La rama `main` local diverge de `origin/main` — no hacer merge ni rebase sin revisión explícita del estado de ambas ramas.
+
+*Log cerrado: 2026-08-04.*
