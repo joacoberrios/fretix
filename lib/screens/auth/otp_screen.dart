@@ -462,14 +462,20 @@ class _ReenviarRow extends StatelessWidget {
         if (puedeReenviar)
           GestureDetector(
             onTap: onReenviar,
-            child: const Text(
-              'Reenviar SMS',
-              style: TextStyle(
-                color:      FretixColors.accent,
-                fontSize:   14,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
-                decorationColor: FretixColors.accent,
+            // SizedBox 44px garantiza touch target mínimo (a11y).
+            child: const SizedBox(
+              height: 44,
+              child: Center(
+                child: Text(
+                  'Reenviar SMS',
+                  style: TextStyle(
+                    color:      FretixColors.accent,
+                    fontSize:   14,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                    decorationColor: FretixColors.accent,
+                  ),
+                ),
               ),
             ),
           )

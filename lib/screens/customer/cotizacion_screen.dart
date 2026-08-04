@@ -995,10 +995,14 @@ class _SwitchAyudante extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Track animado
+        // Track animado — SizedBox 44px garantiza touch target mínimo (track visual = 28px).
         GestureDetector(
           onTap: () => onChanged(!value),
-          child: AnimatedContainer(
+          child: SizedBox(
+            width: _trackW,
+            height: 44,
+            child: Center(
+            child: AnimatedContainer(
             duration:    const Duration(milliseconds: 200),
             curve:       Curves.easeInOut,
             width:       _trackW,
@@ -1022,6 +1026,8 @@ class _SwitchAyudante extends StatelessWidget {
               ),
             ),
           ),
+          ),  // Center
+          ),  // SizedBox 44px
         ),
         const SizedBox(width: 14),
 

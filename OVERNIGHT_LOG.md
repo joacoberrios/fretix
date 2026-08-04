@@ -212,7 +212,44 @@ node --check: cotizacion OK | confirmar OK | onboarding OK
 
 ---
 
-## TAREA 6 — Accesibilidad y responsive (PENDIENTE)
+## TAREA 6 — Accesibilidad y responsive ✅ PARCIAL
+
+**Timestamp**: 2026-08-04
+
+### Hallazgos de touch targets (mínimo 44×44 dp)
+
+| Componente | Archivo | Dimensión actual | Estado |
+|---|---|---|---|
+| Toggle "Ayudante" (track) | `cotizacion_screen.dart:999` | 48×28dp — 28 < 44 | ✅ Corregido |
+| "Reenviar SMS" GestureDetector | `otp_screen.dart:463` | texto solo, ~20dp | ✅ Corregido |
+| Carrusel de categorías | `cotizacion_screen.dart:849` | 84×~70dp | ✅ OK |
+| Botones ElevatedButton | múltiples pantallas | height: 56dp | ✅ OK |
+| InkWell tarjeta cliente | `home_cliente_screen.dart:152` | height: libre | ✅ OK (ocupa toda la card) |
+
+**Correcciones aplicadas**: los dos widgets incorrectos se wrapearon en `SizedBox(height: 44)` con `Center` para mantener el visual pero ampliar el área táctil.
+
+### Hallazgos de contraste (sobre fondo 0xFF0D0D0D)
+
+| Token | Valor hex | Contraste vs background | WCAG AA |
+|---|---|---|---|
+| textPrimary | #FFFFFF | 19.5:1 | ✅ Pasa AAA |
+| textSecondary | #888888 | ~5.1:1 | ✅ Pasa AA |
+| accent | #D4A373 | ~10:1 | ✅ Pasa AAA |
+| textMuted | #444444 | ~2.5:1 | ❌ Falla AA — solo decorativo |
+
+`textMuted` falla WCAG AA. Revisión pendiente CPO: es intencional como texto "phantom" (placeholders, hints pasivos). Si se usa en texto legible de interfaz → debe cambiarse a `textSecondary`.
+
+### Escalado de texto
+
+- No se usa `textScaler` explícito → Flutter respeta el escalado del sistema (comportamiento correcto por defecto).
+- No hay llamadas a `MediaQuery.textScalerOf()` para deshabilitar scaling — bien.
+- Textos informativos pequeños (fontSize: 11-12) podrían quedar muy pequeños en escalados bajos, pero no hay nada que requiera `MediaQuery.textScaler` para limitar.
+
+### flutter analyze
+
+```
+0 errors, 0 warnings — sobre cotizacion_screen.dart y otp_screen.dart
+```
 
 ---
 
