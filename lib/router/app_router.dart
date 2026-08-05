@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models/cotizacion_args.dart';
@@ -73,7 +74,7 @@ abstract class AppRouter {
         return _fadeRoute(const BuscandoChoferScreen(), settings);
 
       case adminTarifas:
-        return _fadeRoute(const AdminTarifasScreen(), settings);
+        return _fadeRoute(const _AdminGuard(), settings);
 
       default:
         // Ruta no encontrada — pantalla de error temporal
@@ -102,6 +103,87 @@ abstract class AppRouter {
         child:   child,
       ),
       transitionDuration: const Duration(milliseconds: 250),
+    );
+  }
+}
+
+// ─── Admin route guard ────────────────────────────────────────────────────────
+//
+// onGenerateRoute es síncrono, no puede await. El guard verifica el custom claim
+// 'role' del token JWT del usuario actual (mismo campo que usa isAdmin() en
+// firestore.rules). Si el claim no está presente o no es 'admin', muestra
+// _AccesoDenegadoScreen sin llegar a construir AdminTarifasScreen.
+
+class _AdminGuard extends StatelessWidget {
+  const _AdminGuard();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<IdTokenResult?>(
+      future: FirebaseAuth.instance.currentUser?.getIdTokenResult(),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF0D0D0D),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFFD4A373)),
+            ),
+          );
+        }
+        final role = snap.data?.claims?['role'] as String?;
+        if (role == 'admin') return const AdminTarifasScreen();
+        return const _AccesoDenegadoScreen();
+      },
+    );
+  }
+}
+
+class _AccesoDenegadoScreen extends StatelessWidget {
+  const _AccesoDenegadoScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D0D),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white70),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_outline, color: Colors.white30, size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                'Acceso denegado',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Esta sección es solo para administradores.',
+                style: TextStyle(color: Colors.white54, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'Volver',
+                  style: TextStyle(color: Color(0xFFD4A373)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
