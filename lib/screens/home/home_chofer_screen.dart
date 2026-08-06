@@ -13,17 +13,21 @@ class HomeChoferScreen extends StatefulWidget {
 }
 
 class _HomeChoferScreenState extends State<HomeChoferScreen> {
-  bool _disponible            = false;
-  bool _loadingDisponibilidad = true;
-  bool _toggling              = false;
+  bool    _disponible            = false;
+  bool    _loadingDisponibilidad = true;
+  bool    _toggling              = false;
+  String? _categoriaVehiculo;
+
+  // Tracks in-progress accept calls per viajeId to prevent double-tap.
+  final Set<String> _aceptando = {};
 
   @override
   void initState() {
     super.initState();
-    _cargarDisponibilidad();
+    _cargarPerfil();
   }
 
-  Future<void> _cargarDisponibilidad() async {
+  Future<void> _cargarPerfil() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       setState(() => _loadingDisponibilidad = false);
@@ -34,13 +38,42 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
           .collection('users')
           .doc(uid)
           .get();
-      final valor = doc.data()?['disponibleParaViajes'] as bool? ?? false;
+      final data = doc.data();
       setState(() {
-        _disponible             = valor;
-        _loadingDisponibilidad  = false;
+        _disponible            = data?['disponibleParaViajes'] as bool? ?? false;
+        _categoriaVehiculo     = data?['categoriaVehiculo']   as String?;
+        _loadingDisponibilidad = false;
       });
     } catch (_) {
       setState(() => _loadingDisponibilidad = false);
+    }
+  }
+
+  Future<void> _aceptarViaje(String viajeId) async {
+    if (_aceptando.contains(viajeId)) return;
+    setState(() => _aceptando.add(viajeId));
+    try {
+      final callable = FretixAuthService.instance.getCallable(
+        'aceptarViajeFretix',
+        timeout: const Duration(seconds: 15),
+      );
+      await callable.call({'viajeId': viajeId});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:         Text('¡Viaje aceptado! Dirigite al punto de origen.'),
+        backgroundColor: FretixColors.success,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().contains('ya fue aceptado')
+          ? 'Este viaje ya fue tomado por otro chofer.'
+          : 'No se pudo aceptar el viaje. Intentá de nuevo.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:         Text(msg),
+        backgroundColor: FretixColors.danger,
+      ));
+    } finally {
+      if (mounted) setState(() => _aceptando.remove(viajeId));
     }
   }
 
@@ -97,11 +130,14 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
                     const SizedBox(height: 16),
                     _StatsRow(),
                     const SizedBox(height: 32),
-                    _SectionTitle('Historial de viajes'),
+                    _SectionTitle('Viajes disponibles'),
                     const SizedBox(height: 16),
-                    _EmptyState(
-                      icon: Icons.route_outlined,
-                      message: 'Activá tu disponibilidad\npara empezar a recibir pedidos.',
+                    _ViajesDisponiblesSection(
+                      disponible:        _disponible,
+                      categoriaVehiculo: _categoriaVehiculo,
+                      loading:           _loadingDisponibilidad,
+                      aceptando:         _aceptando,
+                      onAceptar:         _aceptarViaje,
                     ),
                     const SizedBox(height: 40),
                   ],
@@ -310,6 +346,234 @@ class _SectionTitle extends StatelessWidget {
         color:      FretixColors.textPrimary,
         fontSize:   18,
         fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+}
+
+// ── Viajes disponibles section ────────────────────────────────────────────────
+
+class _ViajesDisponiblesSection extends StatelessWidget {
+  const _ViajesDisponiblesSection({
+    required this.disponible,
+    required this.categoriaVehiculo,
+    required this.loading,
+    required this.aceptando,
+    required this.onAceptar,
+  });
+
+  final bool          disponible;
+  final String?       categoriaVehiculo;
+  final bool          loading;
+  final Set<String>   aceptando;
+  final void Function(String viajeId) onAceptar;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child:   CircularProgressIndicator(color: FretixColors.accent),
+        ),
+      );
+    }
+
+    if (categoriaVehiculo == null) {
+      return const _EmptyState(
+        icon:    Icons.directions_car_outlined,
+        message: 'Tu cuenta no tiene una categoría de vehículo configurada.\nComunicate con soporte para actualizarla.',
+      );
+    }
+
+    if (!disponible) {
+      return const _EmptyState(
+        icon:    Icons.route_outlined,
+        message: 'Activá tu disponibilidad\npara empezar a recibir pedidos.',
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('viajes')
+          .where('estado',    isEqualTo: 'pending')
+          .where('categoria', isEqualTo: categoriaVehiculo)
+          .orderBy('creadoEn', descending: true)
+          .snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child:   CircularProgressIndicator(color: FretixColors.accent),
+            ),
+          );
+        }
+        if (snap.hasError) {
+          return const _EmptyState(
+            icon:    Icons.wifi_off_rounded,
+            message: 'Error al cargar viajes. Verificá tu conexión.',
+          );
+        }
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const _EmptyState(
+            icon:    Icons.search_off_rounded,
+            message: 'No hay viajes disponibles ahora.\nQuedá disponible para recibirlos.',
+          );
+        }
+        return ListView.separated(
+          shrinkWrap:       true,
+          physics:          const NeverScrollableScrollPhysics(),
+          itemCount:        docs.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, i) {
+            final data    = docs[i].data() as Map<String, dynamic>;
+            final viajeId = docs[i].id;
+            return _ViajeCard(
+              viajeId:   viajeId,
+              data:      data,
+              aceptando: aceptando.contains(viajeId),
+              onAceptar: () => onAceptar(viajeId),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ── Viaje card ────────────────────────────────────────────────────────────────
+
+class _ViajeCard extends StatelessWidget {
+  const _ViajeCard({
+    required this.viajeId,
+    required this.data,
+    required this.aceptando,
+    required this.onAceptar,
+  });
+
+  final String               viajeId;
+  final Map<String, dynamic> data;
+  final bool                 aceptando;
+  final VoidCallback         onAceptar;
+
+  @override
+  Widget build(BuildContext context) {
+    final origen     = data['origen']     as Map<String, dynamic>?;
+    final destino    = data['destino']    as Map<String, dynamic>?;
+    final cotizacion = data['cotizacion'] as Map<String, dynamic>?;
+    final total      = cotizacion?['total']       as num?;
+    final distKm     = cotizacion?['distanciaKm'] as num?;
+    final durMin     = cotizacion?['duracionMin']  as num?;
+
+    final origenAddr  = origen?['address']  as String? ?? '—';
+    final destinoAddr = destino?['address'] as String? ?? '—';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color:        FretixColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: FretixColors.surfaceBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.circle, color: FretixColors.accent, size: 10),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  origenAddr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: FretixColors.textPrimary, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Container(width: 2, height: 12, color: FretixColors.surfaceBorder),
+          ),
+          Row(
+            children: [
+              const Icon(Icons.location_on_outlined, color: FretixColors.textMuted, size: 14),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  destinoAddr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: FretixColors.textSecondary, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (distKm != null) ...[
+                const Icon(Icons.straighten_rounded, color: FretixColors.textMuted, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  '${distKm.toStringAsFixed(1)} km',
+                  style: const TextStyle(color: FretixColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(width: 12),
+              ],
+              if (durMin != null) ...[
+                const Icon(Icons.schedule_outlined, color: FretixColors.textMuted, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  '${durMin.round()} min',
+                  style: const TextStyle(color: FretixColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(width: 12),
+              ],
+              const Spacer(),
+              if (total != null)
+                Text(
+                  '\$${total.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    color:      FretixColors.accent,
+                    fontSize:   16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 36,
+                child: ElevatedButton(
+                  onPressed: aceptando ? null : onAceptar,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:        FretixColors.accent,
+                    foregroundColor:        Colors.black,
+                    disabledBackgroundColor: FretixColors.accent.withOpacity(0.45),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  child: aceptando
+                      ? const SizedBox(
+                          width:  16,
+                          height: 16,
+                          child:  CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color:       Colors.black,
+                          ),
+                        )
+                      : const Text(
+                          'Aceptar',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
