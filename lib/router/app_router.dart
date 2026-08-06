@@ -150,7 +150,7 @@ class _AdminGuard extends StatelessWidget {
 class _ChoferGuard extends StatelessWidget {
   const _ChoferGuard();
 
-  static const _rolesTransportista = {'chofer', 'empresaTransporteMaestro'};
+  static const _rolesTransportista = {'chofer_independiente', 'empresa_transporte_maestro'};
 
   @override
   Widget build(BuildContext context) {
