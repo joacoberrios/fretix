@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -61,7 +62,7 @@ abstract class AppRouter {
         return _fadeRoute(const HomeClienteScreen(), settings);
 
       case homeChofer:
-        return _fadeRoute(const HomeChoferScreen(), settings);
+        return _fadeRoute(const _ChoferGuard(), settings);
 
       case searchLocation:
         return _fadeRoute(const SearchLocationScreen(), settings);
@@ -132,6 +133,46 @@ class _AdminGuard extends StatelessWidget {
         }
         final role = snap.data?.claims?['role'] as String?;
         if (role == 'admin') return const AdminTarifasScreen();
+        return const _AccesoDenegadoScreen();
+      },
+    );
+  }
+}
+
+// ─── Chofer route guard ───────────────────────────────────────────────────────
+//
+// Verifica onboardingRole en /users/{uid} antes de renderizar HomeChoferScreen.
+// onGenerateRoute es síncrono; el guard usa FutureBuilder igual que _AdminGuard.
+// Roles transportista: 'chofer' (independiente) y 'empresaTransporteMaestro'.
+// No usa custom claims porque onboarding.js no llama setCustomUserClaims para
+// estos roles — la única fuente de verdad es el campo onboardingRole en Firestore.
+
+class _ChoferGuard extends StatelessWidget {
+  const _ChoferGuard();
+
+  static const _rolesTransportista = {'chofer', 'empresaTransporteMaestro'};
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const _AccesoDenegadoScreen();
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF0D0D0D),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFFD4A373)),
+            ),
+          );
+        }
+        final data = snap.data?.data() as Map<String, dynamic>?;
+        final rol  = data?['onboardingRole'] as String?;
+        if (rol != null && _rolesTransportista.contains(rol)) {
+          return const HomeChoferScreen();
+        }
         return const _AccesoDenegadoScreen();
       },
     );
