@@ -18,6 +18,15 @@ const ROLES_EMPRESA = new Set([
   'empresa_transporte_maestro',
 ]);
 
+// Roles que deben especificar categoriaVehiculo al registrarse.
+const ROLES_CHOFER = new Set([
+  'chofer_independiente',
+  'empresa_transporte_maestro',
+]);
+
+// Valores válidos de categoriaVehiculo — deben coincidir con CATEGORIAS_VALIDAS de confirmar_viaje.js.
+const CATEGORIAS_VEHICULO = new Set(['mini', 'plus', 'max', 'heavy']);
+
 // Mapea el role id al tipo de empresa para la colección /companies.
 const ROLE_TO_COMPANY_TYPE = {
   cliente_empresa_maestro: 'customer',
@@ -70,7 +79,7 @@ exports.completarOnboardingFretix = onCall(
     const data  = request.data;
 
     // ── Validación de payload ────────────────────────────────────────────────
-    const { role, displayName, email, razonSocial, cuit, nombreComercial } = data;
+    const { role, displayName, email, razonSocial, cuit, nombreComercial, categoriaVehiculo } = data;
 
     if (!role || !ROLE_TO_USER_ROLES[role]) {
       throw new HttpsError('invalid-argument', `Rol inválido: "${role}".`);
@@ -80,10 +89,20 @@ exports.completarOnboardingFretix = onCall(
     }
 
     const esEmpresa = ROLES_EMPRESA.has(role);
+    const esChofer  = ROLES_CHOFER.has(role);
 
     if (esEmpresa) {
       if (!razonSocial) throw new HttpsError('invalid-argument', 'razonSocial es requerido para cuentas empresa.');
       if (!cuit)        throw new HttpsError('invalid-argument', 'cuit es requerido para cuentas empresa.');
+    }
+
+    if (esChofer) {
+      if (!categoriaVehiculo || !CATEGORIAS_VEHICULO.has(categoriaVehiculo)) {
+        throw new HttpsError(
+          'invalid-argument',
+          `categoriaVehiculo requerido para choferes. Valores válidos: mini, plus, max, heavy.`
+        );
+      }
     }
 
     // ── Verificar que el usuario no haya completado el onboarding antes ──────
@@ -109,6 +128,11 @@ exports.completarOnboardingFretix = onCall(
       createdAt:   now,
       isActive:    true,
       isVerified:  false,
+      // Campos exclusivos de choferes:
+      ...(esChofer && {
+        categoriaVehiculo,
+        disponibleParaViajes: false,
+      }),
     };
 
     // ── Ruta A: Usuario simple (particular o chofer independiente) ────────────

@@ -209,6 +209,7 @@ class FretixAuthService {
     String?                 razonSocial,
     String?                 cuit,
     String?                 nombreComercial,
+    String?                 categoriaVehiculo,
   }) async {
     final callable = getCallable(
       'completarOnboardingFretix',
@@ -229,6 +230,8 @@ class FretixAuthService {
         if (nombreComercial?.trim().isNotEmpty ?? false)
           'nombreComercial': nombreComercial!.trim(),
       },
+      if (rol.esTransportista && (categoriaVehiculo?.isNotEmpty ?? false))
+        'categoriaVehiculo': categoriaVehiculo!,
     };
 
     debugPrint('[FretixAuth] Llamando completarOnboardingFretix → rol: ${rol.firestoreId}');

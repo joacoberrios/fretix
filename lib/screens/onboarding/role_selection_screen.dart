@@ -34,6 +34,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
   int            _paso          = 1;           // 1 / 2 / 3
   _Intencion?    _intencion;
   FretixUserRole? _rolElegido;
+  String?        _categoriaVehiculo;
 
   // ── Controllers del formulario (Paso 3) ───────────────────────────────────
   final _formKey          = GlobalKey<FormState>();
@@ -92,6 +93,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
   void _elegirRol(FretixUserRole rol) {
     _rolElegido = rol;
+    _categoriaVehiculo = null; // reset al cambiar de rol
     _irAPaso(3);
     // Auto-focus al campo nombre en el siguiente frame
     WidgetsBinding.instance.addPostFrameCallback(
@@ -106,6 +108,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
   // ── Validación y envío ────────────────────────────────────────────────────
   Future<void> _confirmar() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    if (_rolElegido!.esTransportista && _categoriaVehiculo == null) {
+      setState(() => _errorMsg = 'Elegí la categoría de tu vehículo.');
+      return;
+    }
+
     FocusScope.of(context).unfocus();
 
     setState(() {
@@ -115,14 +123,15 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
     try {
       await FretixAuthService.instance.ejecutarOnboardingBackend(
-        nombre:          _nombreCtrl.text.trim(),
-        email:           _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-        rol:             _rolElegido!,
-        razonSocial:     _esEmpresa ? _razonSocialCtrl.text.trim() : null,
-        cuit:            _esEmpresa ? _cuitCtrl.text.trim()        : null,
-        nombreComercial: _esEmpresa && _nombreComercCtrl.text.trim().isNotEmpty
-                             ? _nombreComercCtrl.text.trim()
-                             : null,
+        nombre:            _nombreCtrl.text.trim(),
+        email:             _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+        rol:               _rolElegido!,
+        razonSocial:       _esEmpresa ? _razonSocialCtrl.text.trim() : null,
+        cuit:              _esEmpresa ? _cuitCtrl.text.trim()        : null,
+        nombreComercial:   _esEmpresa && _nombreComercCtrl.text.trim().isNotEmpty
+                               ? _nombreComercCtrl.text.trim()
+                               : null,
+        categoriaVehiculo: _categoriaVehiculo,
       );
       // La navegación la hace el service via fretixNavigatorKey
     } on FirebaseFunctionsException catch (e) {
@@ -193,18 +202,20 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         return _Paso2(intencion: _intencion!, onElegir: _elegirRol);
       case 3:
         return _Paso3(
-          formKey:          _formKey,
-          rol:              _rolElegido!,
-          nombreCtrl:       _nombreCtrl,
-          nombreFocus:      _nombreFocus,
-          emailCtrl:        _emailCtrl,
-          razonSocialCtrl:  _razonSocialCtrl,
-          cuitCtrl:         _cuitCtrl,
-          nombreComercCtrl: _nombreComercCtrl,
-          esEmpresa:        _esEmpresa,
-          procesando:       _procesando,
-          errorMsg:         _errorMsg,
-          onConfirmar:      _confirmar,
+          formKey:              _formKey,
+          rol:                  _rolElegido!,
+          nombreCtrl:           _nombreCtrl,
+          nombreFocus:          _nombreFocus,
+          emailCtrl:            _emailCtrl,
+          razonSocialCtrl:      _razonSocialCtrl,
+          cuitCtrl:             _cuitCtrl,
+          nombreComercCtrl:     _nombreComercCtrl,
+          esEmpresa:            _esEmpresa,
+          categoriaVehiculo:    _categoriaVehiculo,
+          onCategoriaChanged:   (cat) => setState(() => _categoriaVehiculo = cat),
+          procesando:           _procesando,
+          errorMsg:             _errorMsg,
+          onConfirmar:          _confirmar,
         );
       default:
         return const SizedBox.shrink();
@@ -407,6 +418,8 @@ class _Paso3 extends StatelessWidget {
     required this.cuitCtrl,
     required this.nombreComercCtrl,
     required this.esEmpresa,
+    required this.categoriaVehiculo,
+    required this.onCategoriaChanged,
     required this.procesando,
     required this.errorMsg,
     required this.onConfirmar,
@@ -421,6 +434,8 @@ class _Paso3 extends StatelessWidget {
   final TextEditingController  cuitCtrl;
   final TextEditingController  nombreComercCtrl;
   final bool                   esEmpresa;
+  final String?                categoriaVehiculo;
+  final ValueChanged<String>   onCategoriaChanged;
   final bool                   procesando;
   final String?                errorMsg;
   final VoidCallback           onConfirmar;
@@ -474,6 +489,17 @@ class _Paso3 extends StatelessWidget {
               },
             ),
             const SizedBox(height: 6),
+
+            // ── Categoría de vehículo (solo transportistas) ───────────────
+            if (rol.esTransportista) ...[
+              const SizedBox(height: 14),
+              _DivisorSeccion(label: 'Categoría de vehículo'),
+              const SizedBox(height: 14),
+              _CategoriaVehiculoSelector(
+                selected:  categoriaVehiculo,
+                onChanged: onCategoriaChanged,
+              ),
+            ],
 
             // ── Bloque fiscal (expandible) ─────────────────────────────────
             AnimatedSize(
@@ -1026,6 +1052,74 @@ class _ErrorBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Selector de categoría de vehículo ─────────────────────────────────────────
+class _CategoriaVehiculoSelector extends StatelessWidget {
+  const _CategoriaVehiculoSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String?           selected;
+  final ValueChanged<String> onChanged;
+
+  static const _cats = [
+    (id: 'mini',  label: 'Mini',   icon: Icons.directions_car_outlined),
+    (id: 'plus',  label: 'Plus',   icon: Icons.airport_shuttle_outlined),
+    (id: 'max',   label: 'Max',    icon: Icons.local_shipping_outlined),
+    (id: 'heavy', label: 'Pesado', icon: Icons.construction_outlined),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      crossAxisCount:   2,
+      shrinkWrap:       true,
+      physics:          const NeverScrollableScrollPhysics(),
+      mainAxisSpacing:  10,
+      crossAxisSpacing: 10,
+      childAspectRatio: 2.4,
+      children: _cats.map((cat) {
+        final isSelected = selected == cat.id;
+        return GestureDetector(
+          onTap: () => onChanged(cat.id),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? FretixColors.accent.withOpacity(0.12)
+                  : const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? FretixColors.accent : const Color(0xFF2A2A2A),
+                width: isSelected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  cat.icon,
+                  size:  20,
+                  color: isSelected ? FretixColors.accent : FretixColors.textMuted,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  cat.label,
+                  style: TextStyle(
+                    color:      isSelected ? FretixColors.accent : FretixColors.textMuted,
+                    fontSize:   14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
