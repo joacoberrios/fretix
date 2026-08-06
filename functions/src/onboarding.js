@@ -129,6 +129,9 @@ exports.completarOnboardingFretix = onCall(
 
     const companyType = ROLE_TO_COMPANY_TYPE[role];
 
+    // Necesario para que el cliente lea /companies sin pasar por /company_members.
+    userDoc.companyId = companyRef.id;
+
     const companyDoc = {
       companyId:        companyRef.id,
       type:             companyType,
