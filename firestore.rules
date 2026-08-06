@@ -43,7 +43,8 @@ service cloud.firestore {
         && isOwner(userId)
         && !('roles'      in request.resource.data.diff(resource.data).affectedKeys())
         && !('isVerified' in request.resource.data.diff(resource.data).affectedKeys())
-        && !('isActive'   in request.resource.data.diff(resource.data).affectedKeys());
+        && !('isActive'   in request.resource.data.diff(resource.data).affectedKeys())
+      && !('companyId'  in request.resource.data.diff(resource.data).affectedKeys());
 
       allow delete: if false;
     }
@@ -165,8 +166,9 @@ service cloud.firestore {
     // /config/{configId}  — tarifas y configuración de app
     // ─────────────────────────────────────────────────────────────────────────
     match /config/{configId} {
-      // Lectura: cualquier usuario autenticado (el cotizador muestra tarifas al cliente)
-      allow read: if isAuth();
+      // Lectura: solo admin — cotizarViajeFretix lee server-side (Admin SDK, bypasea reglas).
+      // AdminTarifasScreen ya está detrás de _AdminGuard con el mismo claim.
+      allow read: if isAdmin();
 
       // Escritura: SOLO admin con custom claim — nunca operativo ni cliente.
       // Todo cambio de tarifa en producción debe pasar por Cloud Function
