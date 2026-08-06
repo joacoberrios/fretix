@@ -222,9 +222,30 @@ En el emulador se crea automáticamente. Para producción, agregar a `firestore.
 
 ## TAREA 7 — Test end-to-end
 
-### Timestamp: 2026-08-06T01:00
+### Timestamp: 2026-08-06T03:00
 
-**(Completar con evidencia real al correr los tests)**
+**Evidencia real — corrido contra emulador local (Firestore 127.0.0.1:8282, Auth 127.0.0.1:9099)**
+
+```
+Test Suites: 4 passed, 4 total
+Tests:       61 passed, 61 total
+Snapshots:   0 total
+Time:        1.031 s
+```
+
+Suites incluidas:
+- `cotizacion.test.js` — 13 tests
+- `confirmar_viaje.test.js` — 21 tests
+- `onboarding.test.js` — 21 tests (13 originales + 8 nuevos de Tarea 2)
+- `aceptar_viaje.test.js` — 13 tests (nuevos de Tarea 3)
+
+**flutter analyze:**
+```
+42 issues found — todos info (deprecaciones preexistentes)
+0 errors, 0 warnings
+```
+
+**Confirmación: NO se tocó producción en ningún momento de la sesión.**
 
 ---
 
