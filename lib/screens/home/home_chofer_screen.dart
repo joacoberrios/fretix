@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -12,7 +13,62 @@ class HomeChoferScreen extends StatefulWidget {
 }
 
 class _HomeChoferScreenState extends State<HomeChoferScreen> {
-  bool _disponible = false;
+  bool _disponible            = false;
+  bool _loadingDisponibilidad = true;
+  bool _toggling              = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarDisponibilidad();
+  }
+
+  Future<void> _cargarDisponibilidad() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() => _loadingDisponibilidad = false);
+      return;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final valor = doc.data()?['disponibleParaViajes'] as bool? ?? false;
+      setState(() {
+        _disponible             = valor;
+        _loadingDisponibilidad  = false;
+      });
+    } catch (_) {
+      setState(() => _loadingDisponibilidad = false);
+    }
+  }
+
+  Future<void> _onToggle(bool v) async {
+    if (_toggling) return;
+    setState(() { _disponible = v; _toggling = true; });
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() { _disponible = !v; _toggling = false; });
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'disponibleParaViajes': v});
+      setState(() => _toggling = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _disponible = !v; _toggling = false; });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No se pudo actualizar tu disponibilidad. Intentá de nuevo.'),
+        backgroundColor: FretixColors.danger,
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +90,7 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
                     const SizedBox(height: 24),
                     _DisponibilidadCard(
                       disponible: _disponible,
-                      onToggle: (v) => setState(() => _disponible = v),
+                      onToggle: (_loadingDisponibilidad || _toggling) ? null : _onToggle,
                     ),
                     const SizedBox(height: 32),
                     _SectionTitle('Resumen del día'),
@@ -59,7 +115,7 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
   }
 }
 
-// ── Top bar ────────────────────────────────────────────────────────────────────
+// ── Top bar ───────────────────────────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.phone});
@@ -78,9 +134,9 @@ class _TopBar extends StatelessWidget {
                 const Text(
                   'FRETIX',
                   style: TextStyle(
-                    color: FretixColors.accent,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    color:        FretixColors.accent,
+                    fontSize:     13,
+                    fontWeight:   FontWeight.w700,
                     letterSpacing: 2,
                   ),
                 ),
@@ -88,7 +144,7 @@ class _TopBar extends StatelessWidget {
                 Text(
                   phone,
                   style: const TextStyle(
-                    color: FretixColors.textSecondary,
+                    color:    FretixColors.textSecondary,
                     fontSize: 13,
                   ),
                 ),
@@ -96,8 +152,8 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.logout_rounded, color: FretixColors.textSecondary),
-            tooltip: 'Cerrar sesión',
+            icon:      const Icon(Icons.logout_rounded, color: FretixColors.textSecondary),
+            tooltip:   'Cerrar sesión',
             onPressed: () => FretixAuthService.instance.signOut(),
           ),
         ],
@@ -106,12 +162,12 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-// ── Disponibilidad card ────────────────────────────────────────────────────────
+// ── Disponibilidad card ───────────────────────────────────────────────────────
 
 class _DisponibilidadCard extends StatelessWidget {
   const _DisponibilidadCard({required this.disponible, required this.onToggle});
-  final bool               disponible;
-  final ValueChanged<bool> onToggle;
+  final bool                disponible;
+  final ValueChanged<bool>? onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +176,7 @@ class _DisponibilidadCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: FretixColors.surface,
+        color:        FretixColors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: disponible
@@ -131,7 +187,7 @@ class _DisponibilidadCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 48,
+            width:  48,
             height: 48,
             decoration: BoxDecoration(
               color: color.withOpacity(0.12),
@@ -140,7 +196,7 @@ class _DisponibilidadCard extends StatelessWidget {
             child: Icon(
               disponible ? Icons.radio_button_checked : Icons.radio_button_unchecked,
               color: color,
-              size: 24,
+              size:  24,
             ),
           ),
           const SizedBox(width: 16),
@@ -151,8 +207,8 @@ class _DisponibilidadCard extends StatelessWidget {
                 Text(
                   disponible ? 'Disponible' : 'No disponible',
                   style: TextStyle(
-                    color: disponible ? FretixColors.success : FretixColors.textPrimary,
-                    fontSize: 16,
+                    color:      disponible ? FretixColors.success : FretixColors.textPrimary,
+                    fontSize:   16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -162,7 +218,7 @@ class _DisponibilidadCard extends StatelessWidget {
                       ? 'Estás recibiendo pedidos'
                       : 'Activá para recibir pedidos',
                   style: const TextStyle(
-                    color: FretixColors.textSecondary,
+                    color:    FretixColors.textSecondary,
                     fontSize: 13,
                   ),
                 ),
@@ -170,9 +226,9 @@ class _DisponibilidadCard extends StatelessWidget {
             ),
           ),
           Switch(
-            value: disponible,
-            onChanged: onToggle,
-            activeColor: FretixColors.success,
+            value:              disponible,
+            onChanged:          onToggle,
+            activeColor:        FretixColors.success,
             inactiveThumbColor: FretixColors.textMuted,
             inactiveTrackColor: FretixColors.surfaceBorder,
           ),
@@ -182,18 +238,18 @@ class _DisponibilidadCard extends StatelessWidget {
   }
 }
 
-// ── Stats row ──────────────────────────────────────────────────────────────────
+// ── Stats row ─────────────────────────────────────────────────────────────────
 
 class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
       children: const [
-        Expanded(child: _StatCard(label: 'Viajes hoy',   value: '0',      icon: Icons.route_rounded)),
+        Expanded(child: _StatCard(label: 'Viajes hoy',   value: '0',  icon: Icons.route_rounded)),
         SizedBox(width: 12),
-        Expanded(child: _StatCard(label: 'Ganado hoy',   value: '\$0',    icon: Icons.attach_money_rounded)),
+        Expanded(child: _StatCard(label: 'Ganado hoy',   value: r'$0', icon: Icons.attach_money_rounded)),
         SizedBox(width: 12),
-        Expanded(child: _StatCard(label: 'Calificación', value: '—',      icon: Icons.star_rounded)),
+        Expanded(child: _StatCard(label: 'Calificación', value: '—',  icon: Icons.star_rounded)),
       ],
     );
   }
@@ -210,7 +266,7 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
-        color: FretixColors.surface,
+        color:        FretixColors.surface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -220,8 +276,8 @@ class _StatCard extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              color: FretixColors.textPrimary,
-              fontSize: 18,
+              color:      FretixColors.textPrimary,
+              fontSize:   18,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -229,7 +285,7 @@ class _StatCard extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: FretixColors.textSecondary,
+              color:    FretixColors.textSecondary,
               fontSize: 11,
             ),
             textAlign: TextAlign.center,
@@ -240,7 +296,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ── Section title ──────────────────────────────────────────────────────────────
+// ── Section title ─────────────────────────────────────────────────────────────
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text);
@@ -251,15 +307,15 @@ class _SectionTitle extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(
-        color: FretixColors.textPrimary,
-        fontSize: 18,
+        color:      FretixColors.textPrimary,
+        fontSize:   18,
         fontWeight: FontWeight.w700,
       ),
     );
   }
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────────
+// ── Empty state ───────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.icon, required this.message});
@@ -269,10 +325,10 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
+      width:   double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40),
       decoration: BoxDecoration(
-        color: FretixColors.surface,
+        color:        FretixColors.surface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -283,9 +339,9 @@ class _EmptyState extends StatelessWidget {
             message,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: FretixColors.textSecondary,
+              color:    FretixColors.textSecondary,
               fontSize: 14,
-              height: 1.5,
+              height:   1.5,
             ),
           ),
         ],
