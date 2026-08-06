@@ -72,7 +72,8 @@ abstract class AppRouter {
         return _fadeRoute(CotizacionScreen(args: args), settings);
 
       case buscandoChofer:
-        return _fadeRoute(const BuscandoChoferScreen(), settings);
+        final viajeId = settings.arguments as String?;
+        return _fadeRoute(BuscandoChoferScreen(viajeId: viajeId), settings);
 
       case adminTarifas:
         return _fadeRoute(const _AdminGuard(), settings);

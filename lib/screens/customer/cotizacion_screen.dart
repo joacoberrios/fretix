@@ -356,7 +356,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
         'confirmarViajeFretix',
         timeout: const Duration(seconds: 20),
       );
-      await callable.call({
+      final result = await callable.call({
         'clientType':    _clientType!,   // seguro: botón deshabilitado mientras null
         if (_clientType == 'empresa') 'companyId': _companyId!,
         'pricingMethod': _cotizacionActual!['mapsFuente'] ?? 'haversine_contingencia',
@@ -379,8 +379,11 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
         },
       });
 
+      final data    = Map<String, dynamic>.from(result.data as Map);
+      final viajeId = data['viajeId'] as String?;
+
       if (!mounted) return;
-      Navigator.of(context).pushNamed(AppRouter.buscandoChofer);
+      Navigator.of(context).pushNamed(AppRouter.buscandoChofer, arguments: viajeId);
     } catch (e) {
       if (!mounted) return;
       _showErrorSnackBar('No se pudo confirmar el viaje. Intentá de nuevo.');
