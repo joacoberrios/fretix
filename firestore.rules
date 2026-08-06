@@ -194,8 +194,10 @@ service cloud.firestore {
     // /viajes/{viajeId}  — ciclo de vida de cada viaje confirmado
     // ─────────────────────────────────────────────────────────────────────────
     match /viajes/{viajeId} {
-      // Lectura: cliente que solicitó, chofer asignado, o admin
+      // Lectura: viajes pending (cualquier chofer autenticado puede verlos para el matcheo),
+      // cliente que lo creó, chofer asignado, o admin.
       allow read: if isAuth() && (
+        resource.data.estado     == 'pending'        ||
         resource.data.clienteUid == request.auth.uid ||
         resource.data.choferUid  == request.auth.uid ||
         isAdmin()
