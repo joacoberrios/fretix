@@ -59,6 +59,15 @@
         { "fieldPath": "companyId", "order": "ASCENDING" },
         { "fieldPath": "fecha",     "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "viajes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado",    "order": "ASCENDING" },
+        { "fieldPath": "categoria", "order": "ASCENDING" },
+        { "fieldPath": "creadoEn",  "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
