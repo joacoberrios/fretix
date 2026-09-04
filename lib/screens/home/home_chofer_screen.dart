@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../router/app_router.dart';
 import '../../services/auth_service.dart';
 import '../../theme/fretix_colors.dart';
 
@@ -398,6 +399,22 @@ class _SubsanacionBanner extends StatelessWidget {
             'Mientras no corrijas la documentación no podés recibir viajes. '
             'Tomá una nueva foto de tu Tarjeta Verde y volvé a enviarla.',
             style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () =>
+                  Navigator.pushNamed(context, AppRouter.subirTarjetaVerde),
+              style: OutlinedButton.styleFrom(
+                side:            const BorderSide(color: Color(0xFFD4631A)),
+                foregroundColor: const Color(0xFFD4631A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Corregir documentación'),
+            ),
           ),
         ],
       ),

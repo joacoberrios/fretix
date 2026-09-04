@@ -11,6 +11,7 @@ import '../screens/customer/buscando_chofer_screen.dart';
 import '../screens/customer/cotizacion_screen.dart';
 import '../screens/customer/search_location_screen.dart';
 import '../screens/home/home_cliente_screen.dart';
+import '../screens/chofer/subir_tarjeta_verde_screen.dart';
 import '../screens/home/home_chofer_screen.dart';
 import '../screens/onboarding/role_selection_screen.dart';
 
@@ -28,8 +29,9 @@ abstract class AppRouter {
   static const homeChofer  = '/home/chofer';
 
   // ── Rutas del chofer
-  static const ofertaViaje   = '/chofer/oferta';
-  static const tripControl   = '/chofer/trip_control';
+  static const ofertaViaje        = '/chofer/oferta';
+  static const tripControl        = '/chofer/trip_control';
+  static const subirTarjetaVerde  = '/chofer/subir-tarjeta-verde';
 
   // ── Rutas del cliente
   static const searchLocation = '/cliente/buscar';
@@ -65,6 +67,9 @@ abstract class AppRouter {
 
       case homeChofer:
         return _fadeRoute(const _ChoferGuard(), settings);
+
+      case subirTarjetaVerde:
+        return _fadeRoute(const SubirTarjetaVerdeScreen(), settings);
 
       case searchLocation:
         return _fadeRoute(const SearchLocationScreen(), settings);
@@ -168,8 +173,19 @@ class _ChoferGuard extends StatelessWidget {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return const _AccesoDenegadoScreen();
 
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
+    // Lee perfil y vehículo en paralelo para decidir qué pantalla mostrar.
+    // empresa_transporte_maestro sin vehículo registrado también pasa por
+    // SubirTarjetaVerdeScreen en esta versión (Tarea 11). El soporte de flota
+    // múltiple queda documentado como Tarea 11b (ver VALIDACION_LOG.md).
+    return FutureBuilder<List<Object>>(
+      future: Future.wait([
+        FirebaseFirestore.instance.collection('users').doc(uid).get(),
+        FirebaseFirestore.instance
+            .collection('vehiculos')
+            .where('choferUid', isEqualTo: uid)
+            .limit(1)
+            .get(),
+      ]),
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const Scaffold(
@@ -179,12 +195,20 @@ class _ChoferGuard extends StatelessWidget {
             ),
           );
         }
-        final data = snap.data?.data() as Map<String, dynamic>?;
+        final results = snap.data;
+        if (results == null) return const _AccesoDenegadoScreen();
+
+        final userDoc      = results[0] as DocumentSnapshot;
+        final vehiculoSnap = results[1] as QuerySnapshot;
+        final data = userDoc.data() as Map<String, dynamic>?;
         final rol  = data?['onboardingRole'] as String?;
-        if (rol != null && _rolesTransportista.contains(rol)) {
-          return const HomeChoferScreen();
+
+        if (rol == null || !_rolesTransportista.contains(rol)) {
+          return const _AccesoDenegadoScreen();
         }
-        return const _AccesoDenegadoScreen();
+        // Sin vehículo registrado → subida obligatoria antes de operar
+        if (vehiculoSnap.docs.isEmpty) return const SubirTarjetaVerdeScreen();
+        return const HomeChoferScreen();
       },
     );
   }

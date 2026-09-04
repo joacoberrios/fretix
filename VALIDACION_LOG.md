@@ -271,6 +271,73 @@ No hay límite implementado. ¿Hay un máximo de negocio (ej: 1 para
 
 ---
 
+## TAREA 11 — Pantalla de subida de Tarjeta Verde (pieza faltante)
+
+### Timestamp: 2026-09-04 (sesión continuada)
+
+### Auditoría previa
+
+Confirmado con búsqueda exhaustiva: antes de Tarea 11 no existía ninguna
+pantalla ni botón en Flutter que permitiera al chofer subir su Tarjeta Verde.
+El CPO no podía hacer el flujo completo de prueba.
+
+### Cambios aplicados
+
+| Archivo | Tipo | Descripción |
+|---|---|---|
+| `pubspec.yaml` | MOD | `image_picker: ^1.1.2` |
+| `lib/screens/chofer/subir_tarjeta_verde_screen.dart` | NUEVO | Pantalla completa de subida |
+| `lib/router/app_router.dart` | MOD | Nueva ruta + redirect en `_ChoferGuard` |
+| `lib/screens/home/home_chofer_screen.dart` | MOD | Botón "Corregir documentación" en banner subsanación |
+| `test/subir_tarjeta_verde_test.dart` | NUEVO | 14 tests unitarios |
+
+### Flujo implementado
+
+```
+Chofer navega a /home/chofer
+  │
+  └─ _ChoferGuard (Future.wait: userDoc + vehiculoSnap)
+       ├─ Sin vehículo → SubirTarjetaVerdeScreen (primera vez)
+       └─ Con vehículo → HomeChoferScreen
+            └─ pendiente_subsanacion → _SubsanacionBanner
+                  └─ botón "Corregir documentación" → SubirTarjetaVerdeScreen
+                       (modo update: actualiza doc existente)
+```
+
+### Diseño de SubirTarjetaVerdeScreen
+
+- `initState`: consulta `/vehiculos/` por `choferUid == uid`. Si existe → modo actualización (subsanación). Si no → modo creación.
+- Foto: `XFile.readAsBytes()` → `Image.memory()` y `ref.putData()`. Compatible con Flutter Web sin `dart:io`.
+- Path de Storage: `tarjetas_verde/{uid}/{timestamp}.jpg` — historial preservado (DP-2).
+- Crea doc con `estadoValidacion: 'pendiente_ocr'` / actualiza reseteando todos los campos de validación a null.
+- Llama `validarTarjetaVerdeFretix` con el `vehiculoId`.
+- `validado` → `pushNamedAndRemoveUntil(homeChofer)`.
+- `pendiente_revision` → dialog explicativo → `pushNamedAndRemoveUntil(homeChofer)`.
+
+### Categoría `pickup_estructura`
+
+Está en el selector UI pero NO en `CATALOGO_REFERENCIA` del backend. Un vehículo con esta categoría irá automáticamente a `pendiente_revision` (la CF no encuentra el rango de razonabilidad → manda a revisión manual). Documentado con test explícito en `subir_tarjeta_verde_test.dart`.
+
+### Confirmación explícita: empresa_transporte_maestro sin vehículo
+
+**Un chofer con rol `empresa_transporte_maestro` sin vehículo registrado pasa por `SubirTarjetaVerdeScreen` exactamente igual que un `chofer_independiente`.** El `_ChoferGuard` no distingue entre roles para el redirect: si `vehiculoSnap.docs.isEmpty` → `SubirTarjetaVerdeScreen()`, independientemente del rol transportista.
+
+El caso de **empresa con flota de múltiples vehículos** queda fuera del alcance de esta tarea y está documentado como **Tarea 11b — Soporte de flota (empresa_transporte_maestro)**:
+- Permitir N vehículos por `choferUid`
+- UI para gestión de flota (agregar / desvincular vehículos)
+- Matcheo por vehículo óptimo (mayor capacidad validada que cubra el pedido)
+- Límite de vehículos por empresa (DP-3, pendiente decisión CPO)
+
+### Tests nuevos (Tarea 11)
+
+14 tests unitarios en `test/subir_tarjeta_verde_test.dart`:
+- `buildStoragePath`: 3 tests (formato, uid distinto, timestamp distinto)
+- `buildVehiculoPayload` (creación): 9 tests (campos obligatorios, valores iniciales, esquema completo)
+- `buildVehiculoUpdatePayload` (re-subida): 6 tests (reset correcto, preserva choferUid/createdAt)
+- Invariantes de negocio: 2 tests (7 categorías UI, asimetría pickup_estructura documentada)
+
+---
+
 ## Estado de producción
 
 **Confirmación explícita: NO se tocó producción en ningún momento durante esta sesión.**

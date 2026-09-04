@@ -27,6 +27,7 @@ dependencies:
   google_fonts:              ^6.2.1   # Fuente Inter
   cached_network_image:      ^3.4.1   # Avatares con caché
   intl:                      ^0.19.0  # Formateo de fechas y moneda ARS
+  image_picker:              ^1.1.2   # Selección de foto de Tarjeta Verde
 
   # ── Estado (liviana, sin boilerplate excesivo para este scope) ───────────
   provider:                  ^6.1.2
