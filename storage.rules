@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuth() && request.auth.token.get('role', '') == 'admin';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /tarjetas_verde/{choferUid}/{fileName}
+    //
+    // Acceso: SOLO el chofer dueño o un admin.
+    // No negociable — dato de documento privado (Tarjeta Verde).
+    // Decisión CPO confirmada: 04/09/2026.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /tarjetas_verde/{choferUid}/{fileName} {
+      allow read:   if isAuth()
+                    && (request.auth.uid == choferUid || isAdmin());
+      allow write:  if isAuth()
+                    && request.auth.uid == choferUid;
+      allow delete: if false;
+    }
+
+    // CATCH-ALL: denegar todo lo no declarado explícitamente
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+  }
+}
