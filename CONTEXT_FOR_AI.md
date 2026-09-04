@@ -283,22 +283,60 @@ Ruta: Google Maps Directions API (timeout 8s) → fallback Haversine × 1.35 (fa
 | `role_selection_screen.dart` | ✅ Completo |
 | `cotizacion_screen.dart` | ✅ Completo (cotización + confirmación + crédito B2B) |
 | `home_cliente_screen.dart` | ⚠️ Placeholder — grid estático, sin cotizador accesible |
-| `home_chofer_screen.dart` | ⚠️ Parcial — toggle disponibilidad conectado a Firestore; "Resumen del día" e "Historial de viajes" son estáticos/falsos |
+| `home_chofer_screen.dart` | ✅ Matcheo real — toggle disponibilidad + StreamBuilder viajes pending + banner subsanación Tarjeta Verde; "Resumen del día" e "Historial" estáticos |
 | `admin_tarifas_screen.dart` | ✅ Solo lectura — StreamBuilder de /config/tarifas |
-| `buscando_chofer_screen.dart` | ⚠️ Placeholder — muestra spinner, no hay matcheo real |
+| `admin_validaciones_screen.dart` | ✅ Nuevo — StreamBuilder de /vehiculos pending_revision, validación/subsanación manual |
+| `buscando_chofer_screen.dart` | ✅ StreamBuilder real — muestra estado pending (spinner) o aceptado (choferData desnormalizado) |
 
 ---
 
-## Pendiente crítico — sistema de matcheo inexistente
+## Sistema de matcheo — implementado (rama feature-validacion-vehiculo-20260904)
 
-Un viaje confirmado (`confirmarViajeFretix`) crea `/viajes/{id}` con `estado: 'pendiente'` y queda ahí para siempre. No existe ninguna Cloud Function que:
-- Busque choferes disponibles en un radio dado
-- Envíe notificaciones a choferes (FCM no configurado)
-- Actualice el estado del viaje
+### Flujo completo activo
 
-`HomeChoferScreen` tampoco escucha viajes disponibles. El toggle `disponibleParaViajes` escribe a Firestore pero nadie lo consulta todavía.
+1. Cliente cotiza y confirma → `confirmarViajeFretix` crea `/viajes/{id}` con `estado: 'pending'`
+2. Chofer ve viajes en `HomeChoferScreen` (StreamBuilder filtra `estado=='pending'` + `categoria`)
+3. Chofer acepta → `aceptarViajeFretix` (transacción) → `estado: 'aceptado'`
+4. Cliente ve en `BuscandoChoferScreen` (StreamBuilder en `/viajes/{id}`) → muestra `_ChoferAsignadoView`
 
-Este es el siguiente módulo a implementar (Módulo matcheo).
+### Categorías de vehículo — DOS taxonomías coexisten
+
+| Campo | Dónde vive | Valores | Estado |
+|---|---|---|---|
+| `categoriaVehiculo` en `/users/{uid}` | Legacy (onboarding) | `mini\|plus\|max\|heavy` | **Etiqueta visual solamente** |
+| `categoriaVehiculo` en `/vehiculos/{id}` | Nuevo módulo | `utilitario\|pickup\|camion_liviano\|camion_frio\|camion_mediano\|camion_mudanza` | **Etiqueta del vehículo real** |
+| `capacidadMaxKg` en `/vehiculos/{id}` | Nuevo módulo | número (kg) | **Fuente real de matcheo** |
+
+**La comparación de matcheo usa `capacidadMaxKg`, no las etiquetas de categoría.**
+
+### Puente temporal — `UMBRAL_KG_POR_CATEGORIA`
+
+Mientras el cotizador no capture `cargaKg` explícito, `aceptarViajeFretix` usa:
+
+```javascript
+const UMBRAL_KG_POR_CATEGORIA = {
+  mini:  500,   // utilitario minKg
+  plus:  800,   // pickup minKg
+  max:   1400,  // camion_liviano minKg
+  heavy: 4000,  // camion_mediano minKg
+};
+```
+
+Decisión pendiente **DP-1**: migrar a `cargaKg` explícito en el viaje (Opción A). No de este módulo.
+
+### Validación de Tarjeta Verde — prerequisito para matcheo
+
+Un chofer **sin vehículo con `estadoValidacion == 'validado'`** en `/vehiculos/` es bloqueado por:
+- `aceptarViajeFretix`: rechaza antes de la transacción
+- `HomeChoferScreen._ViajesDisponiblesSection`: muestra empty state "en validación"
+
+Estados del vehículo: `pendiente_ocr → pendiente_revision → validado` (Capa 1 = OCR)  
+o `pendiente_revision → pendiente_subsanacion → pendiente_ocr → validado` (Capa 2 = operador, Capa 3 = resubida)
+
+### Limitación conocida — sin techo de capacidad
+
+No hay cota superior en el matcheo. Un camion_mediano puede tomar un viaje `mini`.
+Documentado en `VALIDACION_LOG.md § Limitación conocida`. Pendiente Tarea futura "matcheo por mejor ajuste".
 
 ---
 
@@ -316,11 +354,11 @@ flutter test test/widget_test.dart
 ### Cloud Functions (Jest)
 
 ```
-Test Suites: 3 passed, 3 total
-Tests:       42 passed, 42 total
+Test Suites: 5 passed, 5 total
+Tests:       89 passed, 89 total
 ```
 
-Requiere emuladores corriendo (`firebase emulators:start`).
+Requiere emuladores corriendo (`firebase emulators:start --only firestore,auth`).
 
 ### flutter analyze
 
@@ -350,7 +388,9 @@ Los 40 son deprecaciones de API pre-existentes en otros archivos. Ninguno en `ap
 2. **Pantallas de edición Admin Panel** — `/admin/tarifas/edit`. Requieren Cloud Function `actualizarTarifaFretix` + `audit_log`. No implementar sin aprobación.
 3. **`textMuted` WCAG AA** — ¿intencional como decorativo o debe cambiarse?
 4. **Major version bumps Firebase** — firebase_core 3→4, firebase_auth 5→6, cloud_firestore 5→6. Sesión dedicada con prueba end-to-end.
-5. **Sistema de matcheo** — diseño del flujo completo antes de implementar: ¿polling? ¿Firestore realtime listener? ¿FCM? ¿timeout si ningún chofer acepta?
+5. **DP-1: `cargaKg` explícito en el viaje** — el cotizador actualmente no captura el peso de la carga. `aceptarViajeFretix` usa `UMBRAL_KG_POR_CATEGORIA` como puente. Migración a Opción A (campo explícito) es decisión pendiente del CPO.
+6. **Matcheo por mejor ajuste** — actualmente sin techo de capacidad. Un camion_mediano puede tomar viaje mini. Pendiente Tarea futura de optimización.
+7. **VAPID key web FCM** — placeholder `'BFretixVapidKeyPlaceholder'` en `auth_service.dart`. Reemplazar con la key real de Firebase Console → Project Settings → Cloud Messaging.
 
 ---
 
