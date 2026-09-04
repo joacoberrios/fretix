@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'role_routing.dart';
 
 import '../models/cotizacion_args.dart';
 import '../screens/admin/admin_tarifas_screen.dart';
@@ -50,8 +54,17 @@ abstract class AppRouter {
   static const portalCliente    = '/web/cliente';
   static const portalTransporte = '/web/transporte';
 
+  /// Devuelve la ruta de home correspondiente al onboardingRole guardado en
+  /// Firestore. Fuente única de verdad: usada por _SplashGate y OtpScreen.
+  /// La lógica vive en role_routing.dart para permitir tests VM.
+  static String homeForRole(String? onboardingRole) =>
+      resolveHomeForRole(onboardingRole);
+
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
+
+      case splash:
+        return _fadeRoute(const _SplashGate(), settings);
 
       case login:
         return _fadeRoute(const PhoneInputScreen(), settings);
@@ -119,6 +132,60 @@ abstract class AppRouter {
         child:   child,
       ),
       transitionDuration: const Duration(milliseconds: 250),
+    );
+  }
+}
+
+// ─── Splash / auth gate ───────────────────────────────────────────────────────
+//
+// Primera pantalla que ve la app al arrancar (initialRoute: AppRouter.splash).
+// Espera el primer evento de authStateChanges() para que el SDK de Firebase Auth
+// rehidrate el token desde IndexedDB (web). Sin este gate la app siempre arrancaba
+// en /login aunque hubiera una sesión activa — BUG-SESION-01 (ver VALIDACION_LOG.md).
+
+class _SplashGate extends StatefulWidget {
+  const _SplashGate();
+  @override
+  State<_SplashGate> createState() => _SplashGateState();
+}
+
+class _SplashGateState extends State<_SplashGate> {
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    final user = await FirebaseAuth.instance.authStateChanges().first;
+    if (!mounted) return;
+
+    if (user == null) {
+      Navigator.pushReplacementNamed(context, AppRouter.login);
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final role = doc.data()?['onboardingRole'] as String?;
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppRouter.homeForRole(role));
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppRouter.login);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF0D0D0D),
+      body: Center(
+        child: CircularProgressIndicator(color: Color(0xFFD4A373)),
+      ),
     );
   }
 }

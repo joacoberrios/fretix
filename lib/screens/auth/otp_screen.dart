@@ -179,9 +179,6 @@ class _OtpScreenState extends State<OtpScreen>
 
       if (!mounted) return;
 
-      // Usuario nuevo → onboarding de selección de rol
-      // Usuario existente → cada caso según su rol guardado en Firestore
-      // (la Cloud Function se encarga de redirigir al home correcto)
       if (credential.additionalUserInfo?.isNewUser ?? false) {
         Navigator.pushNamedAndRemoveUntil(
           context,
@@ -189,21 +186,16 @@ class _OtpScreenState extends State<OtpScreen>
           (_) => false,
         );
       } else {
-        // Usuario existente: leer rol desde Firestore para navegar al home correcto.
         String targetRoute = AppRouter.roleSelection;
         try {
           final doc = await FirebaseFirestore.instance
               .collection('users')
               .doc(credential.user!.uid)
               .get();
-          final role = doc.data()?['role'] as String?;
-          if (role == 'chofer') {
-            targetRoute = AppRouter.homeChofer;
-          } else if (role == 'cliente' || role == 'empresa') {
-            targetRoute = AppRouter.homeCliente;
-          }
+          final onboardingRole = doc.data()?['onboardingRole'] as String?;
+          targetRoute = AppRouter.homeForRole(onboardingRole);
         } catch (_) {
-          // Sin datos en Firestore → volver al onboarding
+          // homeForRole(null) ya devuelve roleSelection — safe default
         }
         if (!mounted) return;
         Navigator.pushNamedAndRemoveUntil(context, targetRoute, (_) => false);

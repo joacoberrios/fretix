@@ -27,7 +27,7 @@ class FretixApp extends StatelessWidget {
       navigatorKey:            fretixNavigatorKey,
       theme:                   FretixTheme.dark(),
       onGenerateRoute:         AppRouter.onGenerateRoute,
-      initialRoute:            AppRouter.login,
+      initialRoute:            AppRouter.splash,
     );
   }
 }

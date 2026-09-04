@@ -7,6 +7,93 @@
 
 ---
 
+## BUG-SESION-01 — Session persistence: CPO repite OTP + onboarding en cada carga
+
+> Descubierto: 2026-09-04 (de rebote al probar el flujo de Tarea 11 con el CPO)
+> Rama del fix: `main`
+> Commit: ver sección inferior
+> Clasificación: **bug de arquitectura de sesión** — independiente del módulo de Tarjeta Verde
+
+### Síntoma reportado
+
+El CPO (y cualquier usuario) tenía que volver a ingresar número de teléfono, código OTP,
+y repetir el onboarding completo cada vez que abría la app o recargaba el navegador.
+El onboarding se mostraba aunque el documento `/users/{uid}` ya existía en Firestore.
+
+### Investigación — evidencia por archivo
+
+#### Finding 1: `main.dart:30` — No hay auth gate en el arranque
+
+```dart
+// ANTES del fix:
+initialRoute: AppRouter.login,   // ← siempre, sin chequear currentUser
+```
+
+Firebase Auth persiste el token en IndexedDB por defecto en web (`Persistence.LOCAL`).
+La app tenía el token pero nunca lo chequeaba al arrancar — siempre mostraba `/login`.
+Confirmado: **cero llamadas a `setPersistence` o `Persistence.NONE`** en todo el proyecto.
+
+#### Finding 2: `otp_screen.dart:199` — Campo y valores incorrectos para usuario existente
+
+```dart
+// ANTES del fix (campo y valores incorrectos):
+final role = doc.data()?['role'] as String?;   // campo 'role' no existe
+if (role == 'chofer') { ... }                  // valor 'chofer' tampoco existe
+```
+
+`onboarding.js` escribe `onboardingRole` (no `role`), con valores
+`'chofer_independiente'` / `'empresa_transporte_maestro'` / `'cliente_particular'` /
+`'cliente_empresa_maestro'`. Como el campo `'role'` no existe en Firestore, `role`
+siempre era `null` → `targetRoute` quedaba en `AppRouter.roleSelection` →
+usuario existente veía el formulario de onboarding en cada login.
+
+### Cadena completa del bug
+
+```
+F5 / nueva pestaña
+  └─ initialRoute: login  ← no chequea currentUser
+       └─ CPO ingresa teléfono → OTP  (auth tiene sesión, pero app la ignora)
+            └─ isNewUser == false → lee doc.data()?['role']  ← campo inexistente
+                 └─ role == null → targetRoute = roleSelection
+                      └─ CPO ve onboarding otra vez
+                           └─ CF devuelve alreadyOnboarded:true
+                                └─ Flutter navega a homeChofer ✓ (pero pasó por onboarding)
+```
+
+### Fix aplicado — dos bugs, dos cambios independientes
+
+| Bug | Archivo | Cambio |
+|-----|---------|--------|
+| Sin auth gate al arrancar | `main.dart:30` | `initialRoute: AppRouter.splash` → `_SplashGate` espera el primer evento de `authStateChanges()` (SDK rehidrata IndexedDB) y navega directo al home del rol sin mostrar `/login` |
+| Campo/valores incorrectos | `otp_screen.dart:199` | `doc.data()?['role']` → `doc.data()?['onboardingRole']`; valores corregidos a `'chofer_independiente'` / `'empresa_transporte_maestro'` / `'cliente_particular'` / `'cliente_empresa_maestro'` |
+
+### Arquitectura del fix — cero duplicación
+
+Se extrajeron los archivos:
+- `lib/router/role_routing.dart` — función pura `resolveHomeForRole(String?)`:
+  fuente única de verdad del mapeo `onboardingRole → ruta`.
+  Testeable en VM (sin `dart:html`).
+- `AppRouter.homeForRole()` delega a `resolveHomeForRole()`.
+- `_SplashGate` (en `app_router.dart`) y `otp_screen.dart` llaman ambos a `AppRouter.homeForRole()`.
+
+### Tests
+
+**Archivo:** `test/role_routing_test.dart` — 12 tests:
+- 4 roles reales (`chofer_independiente`, `empresa_transporte_maestro`, `cliente_particular`, `cliente_empresa_maestro`) → rutas correctas
+- 2 valores legacy del bug original (`'chofer'`, `'empresa'`) → verifican que NO producen las rutas que falsamente habrían producido
+- 3 casos default (`null`, `''`, rol inventado) → todos dan `kRouteRoleSelection`
+- 3 invariantes de constantes de ruta
+
+### Comportamiento tras el fix
+
+- **Refresh (F5):** spinner 50-100ms → home del rol (sin OTP, sin onboarding)
+- **Sin sesión:** spinner → `/login` (comportamiento idéntico al anterior para usuarios nuevos)
+- **Nota:** el Navigator stack se pierde en cada refresh (SPA sin deep links). El usuario
+  va a su home, no a la pantalla exacta donde estaba. Aceptado — go_router con URL sync
+  queda documentado como mejora futura fuera del alcance de este bug.
+
+---
+
 ## TAREA 1 — Diseño de esquema
 
 ### Timestamp: 2026-09-04T00:00
