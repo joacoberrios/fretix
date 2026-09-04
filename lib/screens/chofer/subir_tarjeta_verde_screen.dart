@@ -89,8 +89,13 @@ class _SubirTarjetaVerdeScreenState extends State<SubirTarjetaVerdeScreen> {
       // readAsBytes() devuelve Uint8List — funciona en web y móvil sin dart:io
       final bytes = await picked.readAsBytes();
       setState(() { _imageBytes = bytes; _error = null; });
-    } catch (_) {
-      setState(() => _error = 'No se pudo acceder a la cámara o galería.');
+    } catch (e, st) {
+      // LOG TEMPORAL — investigación BUG-PICKER-01: ver error real en consola del browser
+      // ignore: avoid_print
+      print('[SubirTarjetaVerde] pickImage ERROR ▶ $e\n$st');
+      debugPrint('[SubirTarjetaVerde] pickImage source=$source error=$e');
+      setState(() => _error = 'No se pudo acceder a la cámara o galería. '
+          '(debug: ${e.runtimeType})');
     }
   }
 
