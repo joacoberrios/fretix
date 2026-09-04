@@ -7,6 +7,70 @@
 
 ---
 
+## BUG-PICKER-01 — image_picker no funciona en web: MissingPluginException ✅ CERRADO
+
+> Descubierto: 2026-09-04 (al probar SubirTarjetaVerdeScreen en producción)
+> Rama del fix: `main`
+> Estado: **resuelto — CPO pudo subir foto exitosamente**
+> Clasificación: bug de build/caché — independiente de la lógica del módulo de Tarjeta Verde
+
+### Síntoma
+
+Al tocar "Usar cámara" o "De galería" en `SubirTarjetaVerdeScreen`, el browser
+(Chrome) mostraba "No se pudo acceder a la cámara o galería." sin abrir el selector.
+Log real después de agregar debug: `MissingPluginException(No implementation found
+for method pickImage on channel plugins.flutter.io/image_picker)`.
+
+### Causa raíz — evidencia
+
+`image_picker_for_web` (el plugin web de `image_picker`) estaba en `pubspec.lock`
+(versión 3.1.1) pero **no aparecía en el web plugin registrant generado por Flutter**:
+
+```
+# .dart_tool/flutter_build/.../web_plugin_registrant.dart — ANTES del fix:
+# ImagePickerPlugin.registerWith(registrar);  ← AUSENTE
+```
+
+El registrant fue generado cuando `image_picker` aún no estaba en `pubspec.yaml`
+(se agregó en la sesión de Tarea 11). Al hacer `flutter build web` sin `flutter clean`
+previo, el tooling reusó el registrant cacheado y nunca lo regeneró con el plugin nuevo.
+
+Confirmación: `grep "ImagePickerPlugin" build/web/main.dart.js` → 0 resultados
+en el build viejo. Después del fix → plugin presente en el nuevo registrant.
+
+### Fix aplicado
+
+```bash
+flutter clean && flutter pub get && flutter build web --release
+firebase deploy --only hosting --project fretix-dev-jb
+```
+
+El registrant regenerado incluye correctamente:
+```dart
+import 'package:image_picker_for_web/image_picker_for_web.dart';
+ImagePickerPlugin.registerWith(registrar);
+```
+
+### Mejora futura opcional — Opción B (sin prioridad inmediata)
+
+Reemplazar `image_picker` + plugin por `<input type="file">` HTML nativo vía
+`package:web`. Motivaciones:
+- Elimina dependencia de plugin y riesgo de cache stale futuro
+- `input.click()` ocurre sincrónicamente antes de cualquier `await`, preservando
+  la user gesture chain en Safari/WebKit (resuelve la limitación potencial en iOS)
+- Migra de `dart:html` (deprecated) a `package:web` (moderno)
+
+El diseño completo (incluyendo `lib/screens/chofer/image_picker_web.dart` con
+`pickImageWeb({bool camera})`) fue elaborado y documentado en la sesión de 2026-09-04.
+Implementar cuando se toque este archivo por otro motivo o si vuelve a fallar.
+
+### Log de debug mantenido en producción
+
+`subir_tarjeta_verde_screen.dart` mantiene `print('[SubirTarjetaVerde] pickImage ERROR ▶ $e\n$st')`
+en el catch — silencioso para el usuario, visible en consola del browser para debug futuro.
+
+---
+
 ## BUG-SESION-01 — Session persistence: CPO repite OTP + onboarding en cada carga
 
 > Descubierto: 2026-09-04 (de rebote al probar el flujo de Tarea 11 con el CPO)
