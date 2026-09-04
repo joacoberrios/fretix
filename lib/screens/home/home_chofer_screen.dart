@@ -18,6 +18,10 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
   bool    _toggling              = false;
   String? _categoriaVehiculo;
 
+  // Estado del vehículo registrado del chofer (Tarjeta Verde)
+  String? _estadoValidacion;   // null = sin vehículo registrado
+  String? _motivoSubsanacion;  // solo presente si estadoValidacion == 'pendiente_subsanacion'
+
   // Tracks in-progress accept calls per viajeId to prevent double-tap.
   final Set<String> _aceptando = {};
 
@@ -34,14 +38,28 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
       return;
     }
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      final data = doc.data();
+      // Leer perfil del chofer y su vehículo en paralelo
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('users').doc(uid).get(),
+        FirebaseFirestore.instance
+            .collection('vehiculos')
+            .where('choferUid', isEqualTo: uid)
+            .limit(1)
+            .get(),
+      ]);
+
+      final userDoc     = results[0] as DocumentSnapshot;
+      final vehiculoSnap = (results[1] as QuerySnapshot).docs;
+      final userData    = userDoc.data() as Map<String, dynamic>?;
+      final vehiculoData = vehiculoSnap.isNotEmpty
+          ? vehiculoSnap.first.data() as Map<String, dynamic>
+          : null;
+
       setState(() {
-        _disponible            = data?['disponibleParaViajes'] as bool? ?? false;
-        _categoriaVehiculo     = data?['categoriaVehiculo']   as String?;
+        _disponible            = userData?['disponibleParaViajes'] as bool? ?? false;
+        _categoriaVehiculo     = userData?['categoriaVehiculo']   as String?;
+        _estadoValidacion      = vehiculoData?['estadoValidacion'] as String?;
+        _motivoSubsanacion     = vehiculoData?['motivoSubsanacion'] as String?;
         _loadingDisponibilidad = false;
       });
     } catch (_) {
@@ -125,6 +143,8 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
                       disponible: _disponible,
                       onToggle: (_loadingDisponibilidad || _toggling) ? null : _onToggle,
                     ),
+                    if (_estadoValidacion == 'pendiente_subsanacion')
+                      _SubsanacionBanner(motivo: _motivoSubsanacion),
                     const SizedBox(height: 32),
                     _SectionTitle('Resumen del día'),
                     const SizedBox(height: 16),
@@ -325,6 +345,58 @@ class _StatCard extends StatelessWidget {
               fontSize: 11,
             ),
             textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Banner de subsanación pendiente ──────────────────────────────────────────
+
+class _SubsanacionBanner extends StatelessWidget {
+  const _SubsanacionBanner({this.motivo});
+  final String? motivo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3D1A00),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD4631A), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFD4631A), size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Tarjeta Verde pendiente de corrección',
+                style: TextStyle(
+                  color: Color(0xFFD4631A),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (motivo != null && motivo!.isNotEmpty) ...[
+            Text(
+              motivo!,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+          ],
+          const Text(
+            'Mientras no corrijas la documentación no podés recibir viajes. '
+            'Tomá una nueva foto de tu Tarjeta Verde y volvé a enviarla.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],
       ),
