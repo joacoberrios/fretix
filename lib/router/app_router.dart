@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/cotizacion_args.dart';
 import '../screens/admin/admin_tarifas_screen.dart';
+import '../screens/admin/admin_validaciones_screen.dart';
 import '../screens/auth/otp_screen.dart';
 import '../screens/auth/phone_input_screen.dart';
 import '../screens/customer/buscando_chofer_screen.dart';
@@ -40,7 +41,8 @@ abstract class AppRouter {
   static const rating        = '/rating';
 
   // ── Admin (Módulo 5)
-  static const adminTarifas = '/admin/tarifas';
+  static const adminTarifas        = '/admin/tarifas';
+  static const adminValidaciones   = '/admin/validaciones';
 
   // ── Web / corporativo
   static const portalCliente    = '/web/cliente';
@@ -77,6 +79,13 @@ abstract class AppRouter {
 
       case adminTarifas:
         return _fadeRoute(const _AdminGuard(), settings);
+
+      case adminValidaciones:
+        return _fadeRoute(
+          const _AdminGuard(child: AdminValidacionesScreen()),
+          settings,
+        );
+
 
       default:
         // Ruta no encontrada — pantalla de error temporal
@@ -117,7 +126,8 @@ abstract class AppRouter {
 // _AccesoDenegadoScreen sin llegar a construir AdminTarifasScreen.
 
 class _AdminGuard extends StatelessWidget {
-  const _AdminGuard();
+  const _AdminGuard({this.child = const AdminTarifasScreen()});
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +143,7 @@ class _AdminGuard extends StatelessWidget {
           );
         }
         final role = snap.data?.claims?['role'] as String?;
-        if (role == 'admin') return const AdminTarifasScreen();
+        if (role == 'admin') return child;
         return const _AccesoDenegadoScreen();
       },
     );

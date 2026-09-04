@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import '../main.dart';               // fretixNavigatorKey
@@ -256,9 +259,34 @@ class FretixAuthService {
 
     fretixNavigatorKey.currentState
         ?.pushNamedAndRemoveUntil(targetRoute, (_) => false);
+
+    // Registrar FCM token después de que el usuario ya está en el home
+    unawaited(registrarFcmToken());
   }
 
   // ── 4. Actualizar token FCM ───────────────────────────────────────────────
+
+  // Obtiene el token FCM actual y lo persiste en Firestore vía CF.
+  // Silencia errores — FCM puede no estar disponible en web o emulador.
+  Future<void> registrarFcmToken() async {
+    if (currentUser == null) return;
+    try {
+      final messaging = FirebaseMessaging.instance;
+      // En web se requiere VAPID key; en móvil se obtiene directamente.
+      final token = kIsWeb
+          ? await messaging.getToken(
+              vapidKey: 'BFretixVapidKeyPlaceholder', // reemplazar con VAPID real
+            )
+          : await messaging.getToken();
+      if (token == null) return;
+      await actualizarFcmToken(token);
+      // Refrescar automáticamente si Firebase rota el token
+      FirebaseMessaging.instance.onTokenRefresh.listen(actualizarFcmToken);
+    } catch (e) {
+      debugPrint('[FretixAuth] FCM token no disponible: $e');
+    }
+  }
+
   Future<void> actualizarFcmToken(String token) async {
     if (currentUser == null) return;
     final callable = _functions.httpsCallable('actualizarFcmTokenFretix');
