@@ -195,14 +195,31 @@ class _ChoferGuard extends StatelessWidget {
             ),
           );
         }
+        // Error de red / permisos Firestore — causa técnica, no de rol.
+        // Mostrar pantalla de reintento distinta a "Acceso denegado" para
+        // no confundir un fallo temporal con una restricción de autorización.
+        if (snap.hasError) {
+          return _ErrorCargaScreen(onReintentar: () {
+            Navigator.pushNamedAndRemoveUntil(
+                context, AppRouter.homeChofer, (_) => false);
+          });
+        }
         final results = snap.data;
-        if (results == null) return const _AccesoDenegadoScreen();
+        // snap.data solo puede ser null aquí si la plataforma no completó
+        // el snapshot correctamente — tratar como error transitorio.
+        if (results == null) {
+          return _ErrorCargaScreen(onReintentar: () {
+            Navigator.pushNamedAndRemoveUntil(
+                context, AppRouter.homeChofer, (_) => false);
+          });
+        }
 
         final userDoc      = results[0] as DocumentSnapshot;
         final vehiculoSnap = results[1] as QuerySnapshot;
         final data = userDoc.data() as Map<String, dynamic>?;
         final rol  = data?['onboardingRole'] as String?;
 
+        // Rol no reconocido → acceso real denegado (no es un fallo técnico).
         if (rol == null || !_rolesTransportista.contains(rol)) {
           return const _AccesoDenegadoScreen();
         }
@@ -210,6 +227,60 @@ class _ChoferGuard extends StatelessWidget {
         if (vehiculoSnap.docs.isEmpty) return const SubirTarjetaVerdeScreen();
         return const HomeChoferScreen();
       },
+    );
+  }
+}
+
+// ─── Error de carga (red / permisos) — distinto a acceso denegado ────────────
+//
+// Se muestra cuando el FutureBuilder del guard falla por razón técnica
+// (Firestore permission-denied temporal, sin conectividad, etc.).
+// Intencionalmente diferente a _AccesoDenegadoScreen para no confundir
+// un fallo de infraestructura con una restricción de autorización de rol.
+
+class _ErrorCargaScreen extends StatelessWidget {
+  const _ErrorCargaScreen({required this.onReintentar});
+  final VoidCallback onReintentar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D0D),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_outlined, color: Colors.white30, size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                'No pudimos cargar tu perfil',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Verificá tu conexión e intentá de nuevo.',
+                style: TextStyle(color: Colors.white54, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              TextButton(
+                onPressed: onReintentar,
+                child: const Text(
+                  'Reintentar',
+                  style: TextStyle(color: Color(0xFFD4A373), fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

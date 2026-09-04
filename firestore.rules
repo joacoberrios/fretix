@@ -96,6 +96,10 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────────────
     // /vehicles/{vehicleId}
     // ─────────────────────────────────────────────────────────────────────────
+    // NOTA: Esta colección en inglés es un remanente de un diseño anterior.
+    // NO está conectada a /vehiculos/ (español) que usa el código actual.
+    // Se deja sin tocar — fuera de alcance hasta que se decida migrar o eliminar.
+    // ─────────────────────────────────────────────────────────────────────────
     match /vehicles/{vehicleId} {
       // Lectura: el dueño del vehículo (individual o empresa) o admin
       allow read: if isAuth() && (
@@ -105,6 +109,38 @@ service cloud.firestore {
 
       // Escritura: solo Cloud Functions (alta de vehículo, verificación de docs)
       allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // /vehiculos/{vehiculoId}  — vehículos del módulo de validación Tarjeta Verde
+    //
+    // Colección creada en Tarea 1 del módulo de validación. Esta regla faltaba
+    // desde el inicio — el catch-all al final denegaba todas las lecturas,
+    // causando el bug de "Acceso denegado" al completar el onboarding de chofer.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /vehiculos/{vehiculoId} {
+      // Lectura: el chofer dueño (choferUid == uid) o admin.
+      // La query where('choferUid', isEqualTo: uid) es consistente con la regla
+      // — Firestore verifica automáticamente que los docs retornados la cumplan.
+      allow read: if isAuth() && (
+        resource.data.choferUid == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Creación: solo el chofer autenticado, y el campo choferUid debe
+      // coincidir con su propio uid — no puede crear en nombre de otro chofer.
+      allow create: if isAuth()
+        && request.resource.data.choferUid == request.auth.uid;
+
+      // Actualización: el chofer dueño (re-subida/subsanación)
+      // o el admin (validar/subsanar desde /admin/validaciones).
+      allow update: if isAuth() && (
+        resource.data.choferUid == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Delete: nunca desde el cliente — mismo patrón que el resto del sistema.
+      allow delete: if false;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -338,6 +338,83 @@ El caso de **empresa con flota de múltiples vehículos** queda fuera del alcanc
 
 ---
 
+## BUG POSTMORTEM — "Acceso denegado" al completar onboarding de chofer
+
+### Timestamp: 2026-09-04 (sesión continuada, post Tarea 11)
+
+### Síntoma reportado
+
+Un chofer nuevo completaba el formulario de onboarding y veía "Acceso denegado" en la siguiente pantalla en vez de `SubirTarjetaVerdeScreen`.
+
+### Investigación — evidencia real
+
+| Pregunta | Respuesta con evidencia |
+|---|---|
+| ¿Race condition con `onboardingRole`? | **No.** `ejecutarOnboardingBackend` hace `await callable.call(payload)` completo antes de navegar. La CF escribe `/users/{uid}` antes de retornar. |
+| ¿`categoriaVehiculo` en lugar incorrecto? | **No.** `onboarding.js` guarda `mini\|plus\|max\|heavy` en `/users/{uid}` (correcto). La Tarea 11 guarda categoría distinta en `/vehiculos/{id}` (también correcto, dos taxonomías intencionales). |
+| ¿Causa real del "Acceso denegado"? | **Bug en Firestore rules: colección `/vehiculos/` sin regla** — detalle abajo. |
+
+### Causa raíz — `/vehicles/` (inglés) vs `/vehiculos/` (español)
+
+`firestore.rules` tenía regla para `/vehicles/{vehicleId}` (inglés) pero **no para `/vehiculos/{vehiculoId}`** (español), que es la colección real usada en todo el código del módulo de validación.
+
+El catch-all al final:
+```
+match /{document=**} { allow read, write: if false; }
+```
+bloqueaba **todas** las lecturas y escrituras a `/vehiculos/` desde el cliente.
+
+`/vehicles/` (inglés) es un remanente de un diseño anterior, sin conexión al código actual. Se deja sin tocar — fuera de alcance hasta que se decida migrar o eliminar.
+
+### Cadena de efectos confirmados y resueltos
+
+| Punto de fallo | Comportamiento con el bug | Visible para el usuario | Resuelto |
+|---|---|---|---|
+| `_ChoferGuard` (Tarea 11) | `Future.wait` lanza excepción → `snap.hasError` → `snap.data == null` → `_AccesoDenegadoScreen` | **Sí** — bug visible, "Acceso denegado" | ✅ Fix 1 + Fix 2 |
+| `HomeChoferScreen._cargarPerfil` (Tarea 6) | `Future.wait` lanza excepción → `catch (_)` silencia → `_estadoValidacion == null` siempre → banner subsanación nunca visible en producción | No (silencioso) | ✅ Fix 1 |
+| `AdminValidacionesScreen` | StreamBuilder sobre `/vehiculos/` fallaba → lista siempre vacía en producción | No (silencioso) | ✅ Fix 1 |
+| `SubirTarjetaVerdeScreen._verificarVehiculoExistente` | Query a `/vehiculos/` fallaba → siempre modo creación → re-subida creaba doc duplicado en vez de actualizar | No (silencioso) | ✅ Fix 1 |
+
+### Fixes aplicados
+
+**Fix 1 — `firestore.rules` (deploado)**
+
+Regla nueva para `/vehiculos/{vehiculoId}`:
+
+```javascript
+match /vehiculos/{vehiculoId} {
+  allow read:   if isAuth() && (resource.data.choferUid == request.auth.uid || isAdmin());
+  allow create: if isAuth() && request.resource.data.choferUid == request.auth.uid;
+  allow update: if isAuth() && (resource.data.choferUid == request.auth.uid || isAdmin());
+  allow delete: if false;
+}
+```
+
+Deploy: `firebase deploy --only firestore:rules --project fretix-dev-jb` — ✅ exitoso.
+
+**Tabla de impacto Fix 1:**
+
+| Acción | Antes | Después |
+|---|---|---|
+| Chofer lee su vehículo | ❌ denegado (bug) | ✅ permitido |
+| Chofer crea su vehículo | ❌ denegado (bug) | ✅ permitido |
+| Chofer actualiza su vehículo | ❌ denegado (bug) | ✅ permitido |
+| Admin lee todos los vehículos | ❌ denegado (bug) | ✅ permitido |
+| Admin actualiza vehículo | ❌ denegado (bug) | ✅ permitido |
+| Chofer A lee vehículo de chofer B | ❌ denegado | ❌ denegado (sin cambio) |
+| Chofer elimina vehículo | ❌ denegado | ❌ denegado (sin cambio) |
+| Colección `/vehicles/` (inglés) | sin cambio | sin cambio |
+
+**Fix 2 — `_ChoferGuard` manejo de error (código)**
+
+- `snap.hasError` → nueva `_ErrorCargaScreen` ("No pudimos cargar tu perfil" + botón Reintentar).
+- `rol incorrecto` → `_AccesoDenegadoScreen` (sin cambios — solo para fallo real de rol).
+- `results == null` sin error → también `_ErrorCargaScreen` (estado inesperado, no "Acceso denegado").
+
+`flutter analyze lib/router/app_router.dart` → **0 errores**.
+
+---
+
 ## Estado de producción
 
 **Confirmación explícita: NO se tocó producción en ningún momento durante esta sesión.**
