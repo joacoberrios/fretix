@@ -170,9 +170,53 @@ del vehículo y muestra instrucciones para resubir.
 
 ### Timestamp: 2026-09-04T01:00
 
+**Decisión: Opción C (híbrida).** El viaje sigue usando categoría string
+(`mini|plus|max|heavy`). El vehículo ya usa kg reales (`capacidadMaxKg`).
+Puente temporal con `UMBRAL_KG_POR_CATEGORIA`.
+
 **Archivos modificados:**
-- `functions/src/aceptar_viaje.js` — valida `capacidadMaxKg >= cargaKg` del viaje
-- `lib/screens/home/home_chofer_screen.dart` — StreamBuilder filtra por vehículo validado
+- `functions/src/aceptar_viaje.js`
+- `functions/test/aceptar_viaje.test.js`
+- `lib/screens/home/home_chofer_screen.dart`
+
+### Mapeo categoría de viaje → kg mínimo requerido
+
+```javascript
+const UMBRAL_KG_POR_CATEGORIA = {
+  mini:  500,   // utilitario minKg
+  plus:  800,   // pickup minKg
+  max:   1400,  // camion_liviano minKg
+  heavy: 4000,  // camion_mediano minKg
+};
+```
+
+Fuente: `minKg` del `CATALOGO_REFERENCIA` en `validar_tarjeta_verde.js`.
+
+### Lógica de aceptarViajeFretix (nuevo orden)
+
+1. Verificar rol de chofer y `disponibleParaViajes`
+2. Buscar vehículo con `estadoValidacion == 'validado'` en `/vehiculos/`
+   — si no existe, rechazado **antes** de comparar capacidad
+3. Leer `capacidadMaxKg` del vehículo validado
+4. Transacción: verificar `estado == 'pending'`, luego `capacidadMaxKg >= umbral`
+
+### Limitación conocida — sin techo de capacidad
+
+El chequeo es `capacidadMaxKg >= umbral(categoria)` **sin cota superior**.
+Un vehículo sobredimensionado (ej: camion_mediano 4900 kg) puede aceptar
+un viaje `'mini'` (umbral 500 kg). Esto es ineficiente operativamente
+(asignación subóptima) pero no es una falla de seguridad.
+
+**Pendiente como futura Tarea "matcheo por mejor ajuste"**, fuera del
+alcance de este módulo. Cubierto explícitamente por un test unitario
+(`'sin techo — comportamiento documentado'`).
+
+### Puente temporal — pendiente migración completa (DP-1)
+
+La migración completa (Opción A: cliente declara `cargaKg` al cotizar,
+el viaje lleva ese campo, el matcheo compara exacto) queda como pendiente
+explícito para una sesión futura. El cotizador actual no captura `cargaKg`.
+Marcado con `TODO(CPO/DP-1)` en el código.
 
 ---
 

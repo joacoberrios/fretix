@@ -5,6 +5,19 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const ROLES_CHOFER = new Set(['chofer_independiente', 'empresa_transporte_maestro']);
 
+// Opción C — mapeo provisional categoría de viaje → kg mínimo requerido.
+// Basado en minKg del CATALOGO_REFERENCIA de validar_tarjeta_verde.js.
+// Sin techo: vehículo grande puede tomar viaje chico (limitación conocida,
+// ver VALIDACION_LOG.md § Limitación conocida — Tarea 7).
+// TODO(CPO/DP-1): reemplazar por campo cargaKg explícito en el viaje
+// cuando el cotizador lo capture (Opción A futura).
+const UMBRAL_KG_POR_CATEGORIA = {
+  mini:  500,
+  plus:  800,
+  max:   1400,
+  heavy: 4000,
+};
+
 exports.aceptarViajeFretix = onCall(
   {
     region: 'us-central1',
@@ -42,8 +55,28 @@ exports.aceptarViajeFretix = onCall(
       throw new HttpsError('failed-precondition', 'El chofer no está disponible para viajes.');
     }
 
-    if (!choferData.categoriaVehiculo) {
-      throw new HttpsError('failed-precondition', 'El chofer no tiene categoría de vehículo configurada.');
+    // ── Verificar vehículo validado (prerequisito antes de comparar capacidad) ─
+    // estadoValidacion == 'validado' es requisito previo. Si no está validado,
+    // ni se lee capacidadMaxKg.
+    const vehiculosSnap = await db.collection('vehiculos')
+      .where('choferUid', '==', uid)
+      .where('estadoValidacion', '==', 'validado')
+      .limit(1)
+      .get();
+
+    if (vehiculosSnap.empty) {
+      throw new HttpsError(
+        'failed-precondition',
+        'No tenés vehículo validado. Completá la verificación de la Tarjeta Verde.'
+      );
+    }
+
+    const capacidadMaxKg = vehiculosSnap.docs[0].data().capacidadMaxKg;
+    if (!capacidadMaxKg || capacidadMaxKg <= 0) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Tu vehículo no tiene capacidad registrada. Contactá con soporte.'
+      );
     }
 
     // ── Transacción: garantiza que solo un chofer acepta el viaje ─────────────
@@ -68,11 +101,20 @@ exports.aceptarViajeFretix = onCall(
           );
         }
 
-        // Verificar que la categoría del viaje coincide con la del chofer
-        if (viaje.categoria !== choferData.categoriaVehiculo) {
+        // Opción C: umbral mínimo por categoría; sin techo documentado.
+        // Ver VALIDACION_LOG.md § Limitación conocida — Tarea 7.
+        const umbral = UMBRAL_KG_POR_CATEGORIA[viaje.categoria];
+        if (!umbral) {
           throw new HttpsError(
             'failed-precondition',
-            `Este viaje requiere categoría '${viaje.categoria}', tu vehículo es '${choferData.categoriaVehiculo}'.`
+            `Categoría de viaje desconocida: '${viaje.categoria}'.`
+          );
+        }
+
+        if (capacidadMaxKg < umbral) {
+          throw new HttpsError(
+            'failed-precondition',
+            `Tu vehículo (${capacidadMaxKg} kg) no alcanza para este viaje (mínimo ${umbral} kg).`
           );
         }
 

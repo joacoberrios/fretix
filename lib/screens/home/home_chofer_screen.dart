@@ -155,6 +155,7 @@ class _HomeChoferScreenState extends State<HomeChoferScreen> {
                     _ViajesDisponiblesSection(
                       disponible:        _disponible,
                       categoriaVehiculo: _categoriaVehiculo,
+                      estadoValidacion:  _estadoValidacion,
                       loading:           _loadingDisponibilidad,
                       aceptando:         _aceptando,
                       onAceptar:         _aceptarViaje,
@@ -429,6 +430,7 @@ class _ViajesDisponiblesSection extends StatelessWidget {
   const _ViajesDisponiblesSection({
     required this.disponible,
     required this.categoriaVehiculo,
+    required this.estadoValidacion,
     required this.loading,
     required this.aceptando,
     required this.onAceptar,
@@ -436,6 +438,7 @@ class _ViajesDisponiblesSection extends StatelessWidget {
 
   final bool          disponible;
   final String?       categoriaVehiculo;
+  final String?       estadoValidacion;
   final bool          loading;
   final Set<String>   aceptando;
   final void Function(String viajeId) onAceptar;
@@ -448,6 +451,16 @@ class _ViajesDisponiblesSection extends StatelessWidget {
           padding: EdgeInsets.all(24),
           child:   CircularProgressIndicator(color: FretixColors.accent),
         ),
+      );
+    }
+
+    // Guard: vehículo registrado pero aún no validado (pendiente_ocr,
+    // pendiente_revision o pendiente_subsanacion). La subsanación ya
+    // muestra su propio banner arriba; aquí bloqueamos el stream también.
+    if (estadoValidacion != null && estadoValidacion != 'validado') {
+      return const _EmptyState(
+        icon:    Icons.verified_outlined,
+        message: 'Tu vehículo está en proceso de validación.\nCuando se apruebe podrás recibir pedidos.',
       );
     }
 
