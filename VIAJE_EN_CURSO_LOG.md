@@ -275,13 +275,54 @@ npm test -- --testPathPattern=viaje_lifecycle
 
 ---
 
-## Decisiones pendientes del CPO
+## Estado de aprobación del CPO — 2026-09-05
 
-| ID | Descripción | Bloquea |
+### Tareas aprobadas (listas para merge)
+
+| Tarea | Estado | Evidencia |
 |---|---|---|
-| CPO-DP-01 | Teléfono completo vs mascarado en pantalla de contacto | TAREA 3/4 (UI) |
-| CPO-DP-02 | Aprobar regla Firestore para tracking GPS (TAREA 5) | TAREA 5 implementación |
-| CPO-DP-03 | ETA tiempo real: Haversine (gratis) vs re-cotización Maps ($) | TAREA 5 implementación |
+| TAREA 0 — Verificación previa | ✅ Aprobada | 3 hallazgos con código real confirmados |
+| TAREA 1 — CFs ciclo de vida | ✅ Aprobada | iniciar/finalizar/cancelar implementados |
+| TAREA 2 — Bloqueo de matcheo | ✅ Aprobada | CF + _ChoferGuard redirect |
+| TAREA 3 — ViajeActivoScreen | ✅ Aprobada | pantalla chofer completa |
+| TAREA 4 — BuscandoChoferScreen | ✅ Aprobada | 5 estados + cancelar + categoría vehículo |
+| TAREA 6 — Tests | ✅ Aprobada | 103/103 passing (suite completa con emulador) |
+
+### Tarea sin implementar — pendiente de decisión
+
+| Tarea | Estado | Bloquea |
+|---|---|---|
+| TAREA 5 — GPS tracking en tiempo real | 🟡 Solo diseño | CPO-DP-02 (regla Firestore) + CPO-DP-03 (estrategia ETA) |
+
+La TAREA 5 no tiene código — únicamente el documento de diseño en este archivo. No bloquea el merge de las tareas aprobadas.
+
+---
+
+## Decisiones del CPO
+
+| ID | Decisión | Estado |
+|---|---|---|
+| CPO-DP-01 | Teléfono **completo** visible desde `aceptado` en adelante. No visible en `pending`. | ✅ **Resuelto** — ya es el comportamiento actual por diseño (clienteData se escribe recién en aceptarViajeFretix, no en confirmarViajeFretix) |
+| CPO-DP-02 | Aprobar regla Firestore para GPS tracking (chofer puede escribir `ubicacionChofer`) | ⏳ Pendiente |
+| CPO-DP-03 | ETA tiempo real: Haversine (gratis) vs re-cotización Maps ($) | ⏳ Pendiente |
+
+---
+
+## Resultados de tests — 2026-09-05
+
+```
+firebase emulators:exec --only firestore,auth "cd functions && npm test"
+
+Test Suites: 6 passed, 6 total
+Tests:       103 passed, 103 total
+Time:        10.104 s
+```
+
+**Flutter analyze**: 0 errores, 0 warnings (46 info preexistentes en archivos no modificados).
+
+**Flutter unit tests**: 12/12 passed (`test/role_routing_test.dart`).
+
+**Total**: 115 tests — 115 passed, 0 failed.
 
 ---
 
@@ -294,5 +335,7 @@ npm test -- --testPathPattern=viaje_lifecycle
 | 2026-09-05 | TAREA 2 | Bloqueo chofer en CF + _ChoferGuard redirect |
 | 2026-09-05 | TAREA 3 | ViajeActivoScreen + ruta /chofer/viaje_activo |
 | 2026-09-05 | TAREA 4 | BuscandoChoferScreen: 5 estados + botón cancelar |
-| 2026-09-05 | TAREA 5 | Diseño GPS (no implementado — awaiting CPO-DP-02/03) |
-| 2026-09-05 | TAREA 6 | Tests ciclo de vida en emulador |
+| 2026-09-05 | TAREA 5 | Diseño GPS solamente (no implementado — CPO-DP-02/03 pendientes) |
+| 2026-09-05 | TAREA 6 | 10 tests ciclo de vida en emulador (103 total en suite) |
+| 2026-09-05 | — | CPO-DP-01 resuelto: teléfono completo desde aceptado |
+| 2026-09-05 | — | CPO verificó 4 puntos de código real — todas aprobadas |
