@@ -16,6 +16,7 @@ import '../screens/customer/cotizacion_screen.dart';
 import '../screens/customer/search_location_screen.dart';
 import '../screens/home/home_cliente_screen.dart';
 import '../screens/chofer/subir_tarjeta_verde_screen.dart';
+import '../screens/chofer/viaje_activo_screen.dart';
 import '../screens/home/home_chofer_screen.dart';
 import '../screens/onboarding/role_selection_screen.dart';
 
@@ -36,6 +37,7 @@ abstract class AppRouter {
   static const ofertaViaje        = '/chofer/oferta';
   static const tripControl        = '/chofer/trip_control';
   static const subirTarjetaVerde  = '/chofer/subir-tarjeta-verde';
+  static const viajeActivo        = '/chofer/viaje_activo';
 
   // ── Rutas del cliente
   static const searchLocation = '/cliente/buscar';
@@ -83,6 +85,13 @@ abstract class AppRouter {
 
       case subirTarjetaVerde:
         return _fadeRoute(const SubirTarjetaVerdeScreen(), settings);
+
+      case viajeActivo:
+        final viajeId = settings.arguments as String?;
+        if (viajeId == null) {
+          return _fadeRoute(const HomeChoferScreen(), settings);
+        }
+        return _fadeRoute(ViajeActivoScreen(viajeId: viajeId), settings);
 
       case searchLocation:
         return _fadeRoute(const SearchLocationScreen(), settings);
@@ -240,7 +249,7 @@ class _ChoferGuard extends StatelessWidget {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return const _AccesoDenegadoScreen();
 
-    // Lee perfil y vehículo en paralelo para decidir qué pantalla mostrar.
+    // Lee perfil, vehículo y viaje activo en paralelo para decidir qué pantalla mostrar.
     // empresa_transporte_maestro sin vehículo registrado también pasa por
     // SubirTarjetaVerdeScreen en esta versión (Tarea 11). El soporte de flota
     // múltiple queda documentado como Tarea 11b (ver VALIDACION_LOG.md).
@@ -250,6 +259,12 @@ class _ChoferGuard extends StatelessWidget {
         FirebaseFirestore.instance
             .collection('vehiculos')
             .where('choferUid', isEqualTo: uid)
+            .limit(1)
+            .get(),
+        FirebaseFirestore.instance
+            .collection('viajes')
+            .where('choferUid', isEqualTo: uid)
+            .where('estado', whereIn: ['aceptado', 'en_curso'])
             .limit(1)
             .get(),
       ]),
@@ -281,8 +296,9 @@ class _ChoferGuard extends StatelessWidget {
           });
         }
 
-        final userDoc      = results[0] as DocumentSnapshot;
-        final vehiculoSnap = results[1] as QuerySnapshot;
+        final userDoc       = results[0] as DocumentSnapshot;
+        final vehiculoSnap  = results[1] as QuerySnapshot;
+        final viajeActivo   = results[2] as QuerySnapshot;
         final data = userDoc.data() as Map<String, dynamic>?;
         final rol  = data?['onboardingRole'] as String?;
 
@@ -292,6 +308,11 @@ class _ChoferGuard extends StatelessWidget {
         }
         // Sin vehículo registrado → subida obligatoria antes de operar
         if (vehiculoSnap.docs.isEmpty) return const SubirTarjetaVerdeScreen();
+        // Viaje activo (aceptado o en_curso) → redirigir directamente a ViajeActivoScreen
+        if (viajeActivo.docs.isNotEmpty) {
+          final viajeId = viajeActivo.docs.first.id;
+          return ViajeActivoScreen(viajeId: viajeId);
+        }
         return const HomeChoferScreen();
       },
     );

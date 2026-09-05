@@ -55,9 +55,22 @@ exports.aceptarViajeFretix = onCall(
       throw new HttpsError('failed-precondition', 'El chofer no está disponible para viajes.');
     }
 
+    // ── TAREA 2: bloquear si ya tiene un viaje activo ─────────────────────────
+    // Admin SDK bypasea Firestore rules — puede consultar viajes de cualquier uid.
+    const activoSnap = await db.collection('viajes')
+      .where('choferUid', '==', uid)
+      .where('estado', 'in', ['aceptado', 'en_curso'])
+      .limit(1)
+      .get();
+
+    if (!activoSnap.empty) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Ya tenés un viaje activo. Finalizalo o cancelalo antes de aceptar otro.'
+      );
+    }
+
     // ── Verificar vehículo validado (prerequisito antes de comparar capacidad) ─
-    // estadoValidacion == 'validado' es requisito previo. Si no está validado,
-    // ni se lee capacidadMaxKg.
     const vehiculosSnap = await db.collection('vehiculos')
       .where('choferUid', '==', uid)
       .where('estadoValidacion', '==', 'validado')
@@ -71,7 +84,8 @@ exports.aceptarViajeFretix = onCall(
       );
     }
 
-    const capacidadMaxKg = vehiculosSnap.docs[0].data().capacidadMaxKg;
+    const vehiculoData   = vehiculosSnap.docs[0].data();
+    const capacidadMaxKg = vehiculoData.capacidadMaxKg;
     if (!capacidadMaxKg || capacidadMaxKg <= 0) {
       throw new HttpsError(
         'failed-precondition',
@@ -102,7 +116,6 @@ exports.aceptarViajeFretix = onCall(
         }
 
         // Opción C: umbral mínimo por categoría; sin techo documentado.
-        // Ver VALIDACION_LOG.md § Limitación conocida — Tarea 7.
         const umbral = UMBRAL_KG_POR_CATEGORIA[viaje.categoria];
         if (!umbral) {
           throw new HttpsError(
@@ -118,12 +131,34 @@ exports.aceptarViajeFretix = onCall(
           );
         }
 
+        // Leer datos del cliente para desnormalizar en el viaje (admin SDK — bypasea rules).
+        // Permite que ViajeActivoScreen muestre datos de contacto sin cross-user reads del cliente.
+        let clienteDisplayName = null;
+        let clientePhone       = null;
+        try {
+          const clienteSnap = await db.collection('users').doc(viaje.clienteUid).get();
+          if (clienteSnap.exists) {
+            const cd       = clienteSnap.data();
+            clienteDisplayName = cd.displayName ?? null;
+            clientePhone       = cd.phone       ?? null;
+          }
+        } catch (err) {
+          // Si falla la lectura del cliente no bloqueamos el viaje — los campos quedan null.
+          console.warn('[aceptar_viaje] No se pudo leer clienteData:', err.message);
+        }
+
         tx.update(viajeRef, {
           estado:    'aceptado',
           choferUid: uid,
           choferData: {
-            displayName: choferData.displayName ?? null,
-            photoURL:    choferData.photoURL    ?? null,
+            displayName:       choferData.displayName          ?? null,
+            photoURL:          choferData.photoURL             ?? null,
+            phone:             choferData.phone                ?? null,
+            categoriaVehiculo: vehiculoData.categoriaVehiculo  ?? null,
+          },
+          clienteData: {
+            displayName: clienteDisplayName,
+            phone:       clientePhone,
           },
           aceptadoEn: FieldValue.serverTimestamp(),
         });
