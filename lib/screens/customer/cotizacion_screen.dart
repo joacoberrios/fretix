@@ -2,7 +2,7 @@
 //
 // Pantalla de cotización de viaje — Módulo 3.
 // Spec DEFINITIVA firmada por CPO · CMO · CTO · CEO. Inmutable.
-// Usa FretixColors.accent (Cobre 0xFFD4A373, migrado globalmente en fretix_colors.dart).
+// Usa FretixColors.accent (Azul Acero 0xFF8FAAC6, rebrand 2026-09-06).
 
 import 'dart:math' show sin, cos, asin, sqrt, pi;
 
@@ -26,18 +26,18 @@ const _kDestinoMock = LatLng(-32.9500, -68.8700);
 // Prohibido el mapa diurno default, incluso como estado transitorio (spec CTO).
 const _kMapStyleNocturno = r'''
 [
-  {"elementType":"geometry","stylers":[{"color":"#1a1a1a"}]},
+  {"elementType":"geometry","stylers":[{"color":"#080f1c"}]},
   {"elementType":"labels.text.fill","stylers":[{"color":"#555555"}]},
-  {"elementType":"labels.text.stroke","stylers":[{"color":"#0d0d0d"}]},
-  {"featureType":"landscape","elementType":"geometry","stylers":[{"color":"#111111"}]},
+  {"elementType":"labels.text.stroke","stylers":[{"color":"#080f1c"}]},
+  {"featureType":"landscape","elementType":"geometry","stylers":[{"color":"#080f1c"}]},
   {"featureType":"poi","stylers":[{"visibility":"off"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a2a2a"}]},
-  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#111111"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#333333"}]},
-  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#1a1a1a"}]},
+  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#d3dbe3"}]},
+  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#0d1829"}]},
+  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#d3dbe3"}]},
+  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#080f1c"}]},
   {"featureType":"transit","stylers":[{"visibility":"off"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0d0d0d"}]},
-  {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#2a2a2a"}]}
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#080f1c"}]},
+  {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#0d1829"}]}
 ]
 ''';
 
@@ -160,7 +160,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
           Polyline(
             polylineId: const PolylineId('ruta_fretix'),
             points:     puntos,
-            color:      FretixColors.accent, // Cobre — trazado de ruta (Spec C + A)
+            color:      FretixColors.accent, // Azul Acero — trazado de ruta (Spec C + A)
             width:      4,
           ),
         };
@@ -261,12 +261,12 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
     Marker(
       markerId: const MarkerId('origen'),
       position: _origen,
-      icon: BitmapDescriptor.defaultMarkerWithHue(40.0),
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
     ),
     Marker(
       markerId: const MarkerId('destino'),
       position: _destino,
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
     ),
   };
 

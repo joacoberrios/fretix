@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
+import '../../theme/fretix_colors.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminValidacionesScreen
 //
@@ -45,7 +47,7 @@ class AdminValidacionesScreen extends StatelessWidget {
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Color(0xFFD4A373)),
+              child: CircularProgressIndicator(color: FretixColors.accent),
             );
           }
           if (snap.hasError) {
@@ -223,7 +225,7 @@ class _VehiculoCardState extends State<_VehiculoCard> {
           // Encabezado
           Row(
             children: [
-              const Icon(Icons.local_shipping_outlined, color: Color(0xFFD4A373), size: 20),
+              const Icon(Icons.local_shipping_outlined, color: FretixColors.accent, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -238,12 +240,12 @@ class _VehiculoCardState extends State<_VehiculoCard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD4A373).withValues(alpha: 0.15),
+                  color: FretixColors.accent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
                   'Revisión pendiente',
-                  style: TextStyle(color: Color(0xFFD4A373), fontSize: 11),
+                  style: TextStyle(color: FretixColors.accent, fontSize: 11),
                 ),
               ),
             ],
@@ -306,7 +308,7 @@ class _VehiculoCardState extends State<_VehiculoCard> {
           _loading
               ? const Center(
                   child: CircularProgressIndicator(
-                    color: Color(0xFFD4A373),
+                    color: FretixColors.accent,
                     strokeWidth: 2,
                   ),
                 )
@@ -338,7 +340,7 @@ class _VehiculoCardState extends State<_VehiculoCard> {
     if (_imagenCargando) {
       return const SizedBox(
         height: 120,
-        child: Center(child: CircularProgressIndicator(color: Color(0xFFD4A373), strokeWidth: 2)),
+        child: Center(child: CircularProgressIndicator(color: FretixColors.accent, strokeWidth: 2)),
       );
     }
     if (_imageUrl == null) {
@@ -393,7 +395,7 @@ class _VehiculoCardState extends State<_VehiculoCard> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFD4A373)),
+          borderSide: const BorderSide(color: FretixColors.accent),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),

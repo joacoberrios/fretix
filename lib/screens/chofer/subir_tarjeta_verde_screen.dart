@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../router/app_router.dart';
+import '../../theme/fretix_colors.dart';
 import '../../services/auth_service.dart';
 import 'vehiculo_payload.dart';
 
@@ -188,7 +189,7 @@ class _SubirTarjetaVerdeScreenState extends State<SubirTarjetaVerdeScreen> {
                   context, AppRouter.homeChofer, (_) => false);
             },
             child: const Text('Entendido',
-                style: TextStyle(color: Color(0xFFD4A373))),
+                style: TextStyle(color: FretixColors.accent)),
           ),
         ],
       ),
@@ -200,7 +201,7 @@ class _SubirTarjetaVerdeScreenState extends State<SubirTarjetaVerdeScreen> {
     if (_loadingCheck) {
       return const Scaffold(
         backgroundColor: Color(0xFF0D0D0D),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFD4A373))),
+        body: Center(child: CircularProgressIndicator(color: FretixColors.accent)),
       );
     }
 
@@ -271,7 +272,7 @@ class _SubirTarjetaVerdeScreenState extends State<SubirTarjetaVerdeScreen> {
               child: ElevatedButton(
                 onPressed: _subiendo ? null : _subir,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:         const Color(0xFFD4A373),
+                  backgroundColor:         FretixColors.accent,
                   disabledBackgroundColor: const Color(0xFF3A3A3A),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -353,7 +354,7 @@ class _CategoriaSelector extends StatelessWidget {
             style: TextStyle(color: Colors.white38, fontSize: 14),
           ),
           dropdownColor:    const Color(0xFF1A1A1A),
-          iconEnabledColor: const Color(0xFFD4A373),
+          iconEnabledColor: FretixColors.accent,
           style: const TextStyle(color: Colors.white, fontSize: 14),
           items: _opciones
               .map((o) => DropdownMenuItem(value: o.$1, child: Text(o.$2)))
@@ -440,7 +441,7 @@ class _SourceButton extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(icon, color: const Color(0xFFD4A373), size: 24),
+            Icon(icon, color: FretixColors.accent, size: 24),
             const SizedBox(height: 6),
             Text(label,
                 style: const TextStyle(color: Colors.white70, fontSize: 12)),

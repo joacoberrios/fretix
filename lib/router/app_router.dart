@@ -19,6 +19,7 @@ import '../screens/chofer/subir_tarjeta_verde_screen.dart';
 import '../screens/chofer/viaje_activo_screen.dart';
 import '../screens/home/home_chofer_screen.dart';
 import '../screens/onboarding/role_selection_screen.dart';
+import '../theme/fretix_colors.dart';
 
 /// Centraliza todas las rutas nombradas de la app.
 /// Se usa onGenerateRoute (no routes: {}) para poder pasar argumentos tipados.
@@ -193,7 +194,7 @@ class _SplashGateState extends State<_SplashGate> {
     return const Scaffold(
       backgroundColor: Color(0xFF0D0D0D),
       body: Center(
-        child: CircularProgressIndicator(color: Color(0xFFD4A373)),
+        child: CircularProgressIndicator(color: FretixColors.accent),
       ),
     );
   }
@@ -219,7 +220,7 @@ class _AdminGuard extends StatelessWidget {
           return const Scaffold(
             backgroundColor: Color(0xFF0D0D0D),
             body: Center(
-              child: CircularProgressIndicator(color: Color(0xFFD4A373)),
+              child: CircularProgressIndicator(color: FretixColors.accent),
             ),
           );
         }
@@ -255,7 +256,7 @@ class _ChoferGuardState extends State<_ChoferGuard> {
 
   static const _spinner = Scaffold(
     backgroundColor: Color(0xFF0D0D0D),
-    body: Center(child: CircularProgressIndicator(color: Color(0xFFD4A373))),
+    body: Center(child: CircularProgressIndicator(color: FretixColors.accent)),
   );
 
   String? _uid;
@@ -379,7 +380,7 @@ class _ErrorCargaScreen extends StatelessWidget {
                 onPressed: onReintentar,
                 child: const Text(
                   'Reintentar',
-                  style: TextStyle(color: Color(0xFFD4A373), fontSize: 15),
+                  style: TextStyle(color: FretixColors.accent, fontSize: 15),
                 ),
               ),
             ],
@@ -408,7 +409,7 @@ class _ClienteGuard extends StatefulWidget {
 class _ClienteGuardState extends State<_ClienteGuard> {
   static const _spinner = Scaffold(
     backgroundColor: Color(0xFF0D0D0D),
-    body: Center(child: CircularProgressIndicator(color: Color(0xFFD4A373))),
+    body: Center(child: CircularProgressIndicator(color: FretixColors.accent)),
   );
 
   String? _uid;
@@ -488,7 +489,7 @@ class _AccesoDenegadoScreen extends StatelessWidget {
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text(
                   'Volver',
-                  style: TextStyle(color: Color(0xFFD4A373)),
+                  style: TextStyle(color: FretixColors.accent),
                 ),
               ),
             ],
