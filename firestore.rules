@@ -246,6 +246,20 @@ service cloud.firestore {
       // Actualización de estado: NUNCA desde el cliente — solo Cloud Functions.
       allow update: if false;
       allow delete: if false;
+
+      // ── /viajes/{viajeId}/tracking/{doc}
+      // Solo el clienteUid y el choferUid de ESE viaje pueden leer la posición.
+      // Solo el chofer asignado puede escribir.
+      // El get() al doc padre (/viajes/{id}, allow update: if false) garantiza
+      // que los uids comparados son inmutables desde el cliente.
+      match /tracking/{doc} {
+        allow read: if isAuth() && (
+          get(/databases/$(database)/documents/viajes/$(viajeId)).data.clienteUid == request.auth.uid ||
+          get(/databases/$(database)/documents/viajes/$(viajeId)).data.choferUid  == request.auth.uid
+        );
+        allow write: if isAuth() &&
+          get(/databases/$(database)/documents/viajes/$(viajeId)).data.choferUid == request.auth.uid;
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

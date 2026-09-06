@@ -230,11 +230,11 @@ class _ViajeWatcher extends StatelessWidget {
           case 'en_curso':
             final choferData = data['choferData'] as Map<String, dynamic>?;
             final nombre     = choferData?['displayName'] as String? ?? 'Tu chofer';
-            final origenMap2 = data['origen'] as Map<String, dynamic>?;
-            final origenLat2 = (origenMap2?['lat'] as num?)?.toDouble();
-            final origenLng2 = (origenMap2?['lng'] as num?)?.toDouble();
-            final origenPos2 = (origenLat2 != null && origenLng2 != null)
-                ? LatLng(origenLat2, origenLng2)
+            final destinoMap = data['destino'] as Map<String, dynamic>?;
+            final destinoLat = (destinoMap?['lat'] as num?)?.toDouble();
+            final destinoLng = (destinoMap?['lng'] as num?)?.toDouble();
+            final destinoPos = (destinoLat != null && destinoLng != null)
+                ? LatLng(destinoLat, destinoLng)
                 : null;
             return StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
@@ -252,9 +252,9 @@ class _ViajeWatcher extends StatelessWidget {
                   if (lat != null && lng != null) choferPos = LatLng(lat, lng);
                 }
                 return _EnCursoView(
-                  nombre:       nombre,
-                  choferPos:    choferPos,
-                  origenLatLng: origenPos2,
+                  nombre:        nombre,
+                  choferPos:     choferPos,
+                  destinoLatLng: destinoPos,
                 );
               },
             );
@@ -585,10 +585,10 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
 // ── En curso ──────────────────────────────────────────────────────────────────
 
 class _EnCursoView extends StatefulWidget {
-  const _EnCursoView({required this.nombre, this.choferPos, this.origenLatLng});
+  const _EnCursoView({required this.nombre, this.choferPos, this.destinoLatLng});
   final String  nombre;
   final LatLng? choferPos;
-  final LatLng? origenLatLng;
+  final LatLng? destinoLatLng;   // destino del viaje — ETA y marcador del mapa
 
   @override
   State<_EnCursoView> createState() => _EnCursoViewState();
@@ -596,6 +596,22 @@ class _EnCursoView extends StatefulWidget {
 
 class _EnCursoViewState extends State<_EnCursoView> {
   GoogleMapController? _mapController;
+  int?  _etaCalculado;
+  bool  _etaLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.choferPos != null) _recalcularEta();
+  }
+
+  @override
+  void didUpdateWidget(covariant _EnCursoView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.choferPos != oldWidget.choferPos && widget.choferPos != null) {
+      _recalcularEta();
+    }
+  }
 
   @override
   void dispose() {
@@ -603,15 +619,46 @@ class _EnCursoViewState extends State<_EnCursoView> {
     super.dispose();
   }
 
+  Future<void> _recalcularEta() async {
+    final chofer  = widget.choferPos;
+    final destino = widget.destinoLatLng;
+    if (chofer == null || destino == null) return;
+    setState(() => _etaLoading = true);
+    try {
+      final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/directions/json'
+        '?origin=${chofer.latitude},${chofer.longitude}'
+        '&destination=${destino.latitude},${destino.longitude}'
+        '&mode=driving'
+        '&key=$_kMapsApiKey',
+      );
+      final response = await http.get(uri);
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        final body   = jsonDecode(response.body) as Map<String, dynamic>;
+        final routes = body['routes'] as List?;
+        if (routes != null && routes.isNotEmpty) {
+          final leg     = ((routes.first as Map)['legs'] as List?)?.first as Map?;
+          final durSecs = (leg?['duration']?['value'] as num?)?.toInt();
+          if (durSecs != null) {
+            setState(() { _etaCalculado = (durSecs / 60).ceil(); _etaLoading = false; });
+            return;
+          }
+        }
+      }
+    } catch (_) { /* best-effort — sin ETA calculado */ }
+    if (mounted) setState(() => _etaLoading = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (widget.origenLatLng != null)
+        if (widget.destinoLatLng != null)
           SizedBox(
             height: 200,
             child: _MapaCliente(
-              origenPos:    widget.origenLatLng!,
+              origenPos:    widget.destinoLatLng!,   // marcador naranja = destino del viaje
               choferPos:    widget.choferPos,
               onMapCreated: (ctrl) async {
                 _mapController = ctrl;
@@ -625,6 +672,7 @@ class _EnCursoViewState extends State<_EnCursoView> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                const SizedBox(height: 16),
                 Container(
                   width:  80,
                   height: 80,
@@ -653,6 +701,33 @@ class _EnCursoViewState extends State<_EnCursoView> {
                   ),
                   textAlign: TextAlign.center,
                 ),
+                if (_etaCalculado != null || _etaLoading) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color:        FretixColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.schedule_outlined, color: FretixColors.accent, size: 18),
+                        const SizedBox(width: 8),
+                        if (_etaLoading)
+                          const SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(color: FretixColors.accent, strokeWidth: 2),
+                          )
+                        else
+                          Text(
+                            'ETA a destino: $_etaCalculado min',
+                            style: const TextStyle(color: FretixColors.textSecondary, fontSize: 14),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 const Text(
                   'Te avisaremos cuando llegue a destino.',

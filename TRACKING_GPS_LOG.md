@@ -223,9 +223,27 @@ firebase emulators:start --only firestore,auth
 
 | ID | Descripción | Impacto |
 |----|-------------|---------|
-| CPO-DP-04 | Polyline de chofer → origen en `ViajeActivoScreen`: ¿se agrega llamada client-side a Directions API, o se omite? | Visual solo — mapa funciona sin ella |
-| CPO-DP-05 | Clave Maps API `AIzaSyCPrygll6ye2BgPkP-wPSsTS7HoChs_lCw` usada para Directions API client-side. Verificar en Google Cloud Console que tenga restricción de referrer HTTP para evitar uso no autorizado desde otros dominios | Seguridad |
-| CPO-DP-06 | ETA del cliente durante `en_curso` (viaje en progreso): ¿se muestra ETA a destino (diferente lógica)? Por ahora el mapa muestra la posición del chofer sin ETA durante `en_curso` | Producto |
+| CPO-DP-04 | Polyline de chofer → origen en `ViajeActivoScreen` | **Descartado** — marcador de posición cumple el objetivo funcional |
+| CPO-DP-05 | Restricciones de referrer HTTP en la clave Maps API en Google Cloud Console | **Revisión directa del CPO** — sin cambio de código |
+| CPO-DP-06 | ETA del cliente durante `en_curso`: usar `destino` como punto de llegada | **Resuelto** — implementado y commiteado (ver TAREA CPO-DP-06 abajo) |
+
+## TAREA CPO-DP-06 — ETA en_curso usa destino ✅
+
+**Archivo modificado:** `lib/screens/customer/buscando_chofer_screen.dart`
+
+Cambios aplicados:
+- `_ViajeWatcher` `en_curso` case: extrae `destino.lat`/`destino.lng` en lugar de `origen`
+- `_EnCursoView`: campo `origenLatLng` renombrado a `destinoLatLng`
+- `_EnCursoViewState`: agrega `_etaCalculado`, `_etaLoading`, `_recalcularEta()`, `initState`, `didUpdateWidget` — mismo patrón que `_ChoferAsignadoViewState`
+- ETA usa `origin = choferPos`, `destination = destinoLatLng` en Directions API
+- Mapa en `en_curso`: marcador naranja = **destino del viaje** (donde va la carga)
+- Label de ETA: `"ETA a destino: X min"`
+
+**Comportamiento resultante por estado:**
+| Estado | Marcador naranja | ETA calculado |
+|--------|-----------------|---------------|
+| `aceptado` | Origen del viaje | Tiempo chofer → origen (punto de recogida) |
+| `en_curso` | Destino del viaje | Tiempo chofer → destino (punto de entrega) |
 
 ---
 
@@ -234,7 +252,7 @@ firebase emulators:start --only firestore,auth
 | Tarea | Estado |
 |-------|--------|
 | 0 — Verificación previa | ✅ Completada |
-| 1 — Firestore rules | ⏳ Esperando aprobación CPO |
+| 1 — Firestore rules | ✅ Aprobada + deployada (`firebase deploy --only firestore:rules`) |
 | 2 — Chofer GPS | ✅ Implementada |
 | 3 — Mapa chofer | ✅ Implementada |
 | 4 — Mapa+ETA cliente | ✅ Implementada |
