@@ -68,6 +68,22 @@
         { "fieldPath": "categoria", "order": "ASCENDING" },
         { "fieldPath": "creadoEn",  "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "viajes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "choferUid", "order": "ASCENDING" },
+        { "fieldPath": "estado",    "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "viajes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteUid", "order": "ASCENDING" },
+        { "fieldPath": "estado",     "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -9,6 +9,7 @@ const { cotizarViajeFretix }           = require('./src/cotizacion');
 const { confirmarViajeFretix }         = require('./src/confirmar_viaje');
 const { aceptarViajeFretix }           = require('./src/aceptar_viaje');
 const { iniciarViajeFretix }           = require('./src/iniciar_viaje');
+const { confirmarCargaFretix }         = require('./src/confirmar_carga');
 const { finalizarViajeFretix }         = require('./src/finalizar_viaje');
 const { cancelarViajeFretix }          = require('./src/cancelar_viaje');
 const { validarTarjetaVerdeFretix }    = require('./src/validar_tarjeta_verde');
@@ -20,6 +21,7 @@ module.exports = {
   confirmarViajeFretix,
   aceptarViajeFretix,
   iniciarViajeFretix,
+  confirmarCargaFretix,
   finalizarViajeFretix,
   cancelarViajeFretix,
   validarTarjetaVerdeFretix,

@@ -1,14 +1,15 @@
 'use strict';
 /**
- * viaje_lifecycle.test.js — TAREA 6
+ * viaje_lifecycle.test.js
  *
- * Tests end-to-end del ciclo de vida del viaje contra el emulador de Firestore.
- * Cubre: pending → aceptado → en_curso → completado, cancelaciones,
- * y el bloqueo de matcheo cuando el chofer tiene un viaje activo.
+ * Tests del ciclo de vida del viaje contra el emulador de Firestore.
+ * Ciclo actual: pending → aceptado → en_curso → en_transito → completado
  *
- * Requisito: emuladores corriendo antes de ejecutar.
- *   firebase emulators:start --only firestore,auth
- *   npm test -- --testPathPattern=viaje_lifecycle
+ * Semántica de estados:
+ *   aceptado:    chofer va camino al ORIGEN a buscar la carga
+ *   en_curso:    chofer llegó al origen, confirma que cargó
+ *   en_transito: chofer va camino al DESTINO con la carga
+ *   completado:  llegó a destino, viaje terminado
  */
 
 process.env.FIRESTORE_EMULATOR_HOST      = process.env.FIRESTORE_EMULATOR_HOST      || '127.0.0.1:8282';
@@ -78,15 +79,15 @@ async function crearViajeDoc(clienteUid, opts = {}) {
 
 describe('viaje_lifecycle — validaciones de estado (unitario)', () => {
   const ESTADOS_CANCELABLES    = new Set(['pending', 'aceptado']);
-  const ESTADOS_NO_CANCELABLES = ['en_curso', 'completado', 'cancelado'];
+  const ESTADOS_ACTIVOS_CHOFER = new Set(['aceptado', 'en_curso', 'en_transito']);
 
   test('pending y aceptado son cancelables', () => {
     expect(ESTADOS_CANCELABLES.has('pending')).toBe(true);
     expect(ESTADOS_CANCELABLES.has('aceptado')).toBe(true);
   });
 
-  test('en_curso, completado y cancelado NO son cancelables', () => {
-    for (const e of ESTADOS_NO_CANCELABLES) {
+  test('en_curso, en_transito, completado y cancelado NO son cancelables', () => {
+    for (const e of ['en_curso', 'en_transito', 'completado', 'cancelado']) {
       expect(ESTADOS_CANCELABLES.has(e)).toBe(false);
     }
   });
@@ -96,23 +97,44 @@ describe('viaje_lifecycle — validaciones de estado (unitario)', () => {
     expect(puedeIniciar('aceptado')).toBe(true);
     expect(puedeIniciar('pending')).toBe(false);
     expect(puedeIniciar('en_curso')).toBe(false);
+    expect(puedeIniciar('en_transito')).toBe(false);
     expect(puedeIniciar('completado')).toBe(false);
   });
 
-  test('finalizar viaje requiere estado en_curso', () => {
-    const puedeFinalizar = (e) => e === 'en_curso';
-    expect(puedeFinalizar('en_curso')).toBe(true);
+  test('confirmar carga requiere estado en_curso', () => {
+    const puedeConfirmar = (e) => e === 'en_curso';
+    expect(puedeConfirmar('en_curso')).toBe(true);
+    expect(puedeConfirmar('aceptado')).toBe(false);
+    expect(puedeConfirmar('en_transito')).toBe(false);
+    expect(puedeConfirmar('completado')).toBe(false);
+  });
+
+  test('finalizar viaje requiere estado en_transito (no en_curso)', () => {
+    const puedeFinalizar = (e) => e === 'en_transito';
+    expect(puedeFinalizar('en_transito')).toBe(true);
+    expect(puedeFinalizar('en_curso')).toBe(false);   // cambio respecto al ciclo anterior
     expect(puedeFinalizar('aceptado')).toBe(false);
     expect(puedeFinalizar('completado')).toBe(false);
   });
 
-  test('chofer con viaje activo (aceptado o en_curso) no puede aceptar otro', () => {
-    const tieneViajeActivo = (estado) => ['aceptado', 'en_curso'].includes(estado);
+  test('chofer con viaje activo (aceptado, en_curso o en_transito) no puede aceptar otro', () => {
+    const tieneViajeActivo = (estado) => ESTADOS_ACTIVOS_CHOFER.has(estado);
     expect(tieneViajeActivo('aceptado')).toBe(true);
     expect(tieneViajeActivo('en_curso')).toBe(true);
+    expect(tieneViajeActivo('en_transito')).toBe(true);
     expect(tieneViajeActivo('pending')).toBe(false);
     expect(tieneViajeActivo('completado')).toBe(false);
     expect(tieneViajeActivo('cancelado')).toBe(false);
+  });
+
+  test('cliente ve pantalla de seguimiento en estados pending, aceptado, en_curso, en_transito', () => {
+    const estadosClienteActivo = new Set(['pending', 'aceptado', 'en_curso', 'en_transito']);
+    expect(estadosClienteActivo.has('pending')).toBe(true);
+    expect(estadosClienteActivo.has('aceptado')).toBe(true);
+    expect(estadosClienteActivo.has('en_curso')).toBe(true);
+    expect(estadosClienteActivo.has('en_transito')).toBe(true);
+    expect(estadosClienteActivo.has('completado')).toBe(false);
+    expect(estadosClienteActivo.has('cancelado')).toBe(false);
   });
 });
 
@@ -134,33 +156,38 @@ describe('viaje_lifecycle — ciclo completo (integración)', () => {
     await clearCollection('vehiculos');
   });
 
-  test('ciclo completo: pending → aceptado → en_curso → completado', async () => {
+  test('ciclo completo: pending → aceptado → en_curso → en_transito → completado', async () => {
     await crearChoferDoc(uidChofer);
     await crearVehiculoDoc(uidChofer);
     await crearClienteDoc(uidCliente);
     const viajeId  = await crearViajeDoc(uidCliente, { categoria: 'mini' });
     const viajeRef = firestore.collection('viajes').doc(viajeId);
 
-    // Simula aceptarViajeFretix
+    // aceptado (simula aceptarViajeFretix)
     await viajeRef.update({
-      estado:     'aceptado',
-      choferUid:  uidChofer,
-      choferData: { displayName: 'Chofer Test', photoURL: null, phone: '+5492610000099', categoriaVehiculo: 'utilitario' },
+      estado:      'aceptado',
+      choferUid:   uidChofer,
+      choferData:  { displayName: 'Chofer Test', photoURL: null, phone: '+5492610000099', categoriaVehiculo: 'utilitario' },
       clienteData: { displayName: 'Cliente Test', phone: '+5492610000088' },
-      aceptadoEn: new Date(),
+      aceptadoEn:  new Date(),
     });
     let snap = await viajeRef.get();
     expect(snap.data().estado).toBe('aceptado');
     expect(snap.data().choferUid).toBe(uidChofer);
-    expect(snap.data().clienteData.phone).toBe('+5492610000088');
 
-    // Simula iniciarViajeFretix
+    // en_curso (simula iniciarViajeFretix — chofer llegó al origen)
     await viajeRef.update({ estado: 'en_curso', iniciadoEn: new Date() });
     snap = await viajeRef.get();
     expect(snap.data().estado).toBe('en_curso');
     expect(snap.data().iniciadoEn).toBeDefined();
 
-    // Simula finalizarViajeFretix
+    // en_transito (simula confirmarCargaFretix — chofer cargó y sale al destino)
+    await viajeRef.update({ estado: 'en_transito', cargadoEn: new Date() });
+    snap = await viajeRef.get();
+    expect(snap.data().estado).toBe('en_transito');
+    expect(snap.data().cargadoEn).toBeDefined();
+
+    // completado (simula finalizarViajeFretix)
     await viajeRef.update({ estado: 'completado', completadoEn: new Date() });
     snap = await viajeRef.get();
     expect(snap.data().estado).toBe('completado');
@@ -172,7 +199,6 @@ describe('viaje_lifecycle — ciclo completo (integración)', () => {
     const viajeId  = await crearViajeDoc(uidCliente, { estado: 'pending' });
     const viajeRef = firestore.collection('viajes').doc(viajeId);
 
-    // Simula cancelarViajeFretix (cliente)
     await viajeRef.update({
       estado:          'cancelado',
       canceladoEn:     new Date(),
@@ -191,13 +217,7 @@ describe('viaje_lifecycle — ciclo completo (integración)', () => {
     const viajeId  = await crearViajeDoc(uidCliente);
     const viajeRef = firestore.collection('viajes').doc(viajeId);
 
-    await viajeRef.update({
-      estado:    'aceptado',
-      choferUid: uidChofer,
-      aceptadoEn: new Date(),
-    });
-
-    // Simula cancelarViajeFretix (chofer)
+    await viajeRef.update({ estado: 'aceptado', choferUid: uidChofer, aceptadoEn: new Date() });
     await viajeRef.update({
       estado:          'cancelado',
       canceladoEn:     new Date(),
@@ -208,76 +228,114 @@ describe('viaje_lifecycle — ciclo completo (integración)', () => {
     const snap = await viajeRef.get();
     expect(snap.data().estado).toBe('cancelado');
     expect(snap.data().canceladoPorRol).toBe('chofer');
-    expect(snap.data().canceladoPor).toBe(uidChofer);
   });
 
-  test('TAREA 2: bloqueo de matcheo — chofer con viaje aceptado no puede tomar otro', async () => {
+  test('no se puede cancelar desde en_curso', async () => {
+    await crearClienteDoc(uidCliente);
+    const viajeId = await crearViajeDoc(uidCliente, { estado: 'en_curso' });
+    const snap    = await firestore.collection('viajes').doc(viajeId).get();
+
+    const ESTADOS_CANCELABLES = new Set(['pending', 'aceptado']);
+    expect(ESTADOS_CANCELABLES.has(snap.data().estado)).toBe(false);
+  });
+
+  test('no se puede cancelar desde en_transito', async () => {
+    await crearClienteDoc(uidCliente);
+    const viajeId = await crearViajeDoc(uidCliente, { estado: 'en_transito' });
+    const snap    = await firestore.collection('viajes').doc(viajeId).get();
+
+    const ESTADOS_CANCELABLES = new Set(['pending', 'aceptado']);
+    expect(ESTADOS_CANCELABLES.has(snap.data().estado)).toBe(false);
+  });
+
+  test('bloqueo de matcheo — chofer con viaje aceptado no puede tomar otro', async () => {
     await crearChoferDoc(uidChofer);
     await crearVehiculoDoc(uidChofer, { capacidadMaxKg: 560, estadoValidacion: 'validado' });
     await crearClienteDoc(uidCliente);
 
-    // Primer viaje ya aceptado por este chofer
     const viajeId1 = await crearViajeDoc(uidCliente);
-    await firestore.collection('viajes').doc(viajeId1).update({
-      estado:    'aceptado',
-      choferUid: uidChofer,
-    });
+    await firestore.collection('viajes').doc(viajeId1).update({ estado: 'aceptado', choferUid: uidChofer });
 
-    // Query que aceptarViajeFretix ejecuta para detectar viaje activo
     const activoSnap = await firestore.collection('viajes')
       .where('choferUid', '==', uidChofer)
-      .where('estado', 'in', ['aceptado', 'en_curso'])
+      .where('estado', 'in', ['aceptado', 'en_curso', 'en_transito'])
       .limit(1)
       .get();
 
     expect(activoSnap.empty).toBe(false);
-    // Si no está vacío → la CF lanza failed-precondition y no acepta el segundo viaje.
   });
 
-  test('TAREA 2: chofer sin viaje activo pasa el bloqueo', async () => {
+  test('bloqueo de matcheo — chofer con viaje en_transito no puede tomar otro', async () => {
+    await crearChoferDoc(uidChofer);
+    await crearClienteDoc(uidCliente);
+
+    const viajeId1 = await crearViajeDoc(uidCliente);
+    await firestore.collection('viajes').doc(viajeId1).update({ estado: 'en_transito', choferUid: uidChofer });
+
+    const activoSnap = await firestore.collection('viajes')
+      .where('choferUid', '==', uidChofer)
+      .where('estado', 'in', ['aceptado', 'en_curso', 'en_transito'])
+      .limit(1)
+      .get();
+
+    expect(activoSnap.empty).toBe(false);
+  });
+
+  test('chofer sin viaje activo pasa el bloqueo', async () => {
     await crearChoferDoc(uidChofer);
     await crearVehiculoDoc(uidChofer, { capacidadMaxKg: 560, estadoValidacion: 'validado' });
 
     const activoSnap = await firestore.collection('viajes')
       .where('choferUid', '==', uidChofer)
-      .where('estado', 'in', ['aceptado', 'en_curso'])
+      .where('estado', 'in', ['aceptado', 'en_curso', 'en_transito'])
       .limit(1)
       .get();
 
     expect(activoSnap.empty).toBe(true);
-    // Vacío → la CF permite continuar con el proceso de aceptación.
   });
 
-  test('TAREA 2: viaje completado no bloquea al chofer para tomar otro', async () => {
+  test('viaje completado no bloquea al chofer para tomar otro', async () => {
     await crearChoferDoc(uidChofer);
     await crearClienteDoc(uidCliente);
 
-    // Viaje anterior del mismo chofer, ya completado
     const viajeAnterior = await crearViajeDoc(uidCliente);
-    await firestore.collection('viajes').doc(viajeAnterior).update({
-      estado:    'completado',
-      choferUid: uidChofer,
-    });
+    await firestore.collection('viajes').doc(viajeAnterior).update({ estado: 'completado', choferUid: uidChofer });
 
     const activoSnap = await firestore.collection('viajes')
       .where('choferUid', '==', uidChofer)
-      .where('estado', 'in', ['aceptado', 'en_curso'])
+      .where('estado', 'in', ['aceptado', 'en_curso', 'en_transito'])
       .limit(1)
       .get();
 
     expect(activoSnap.empty).toBe(true);
-    // Completado no está en el filtro → el chofer puede aceptar nuevos viajes.
   });
 
-  test('transición inválida: no se puede finalizar un viaje en estado pending', async () => {
+  test('transición inválida: no se puede finalizar desde en_curso (requiere en_transito)', async () => {
+    await crearClienteDoc(uidCliente);
+    const viajeId = await crearViajeDoc(uidCliente, { estado: 'en_curso' });
+    const snap    = await firestore.collection('viajes').doc(viajeId).get();
+
+    // finalizarViajeFretix requiere estado == 'en_transito'
+    const puedeFinalizar = snap.data().estado === 'en_transito';
+    expect(puedeFinalizar).toBe(false);
+  });
+
+  test('transición inválida: no se puede finalizar desde pending', async () => {
     await crearClienteDoc(uidCliente);
     const viajeId = await crearViajeDoc(uidCliente, { estado: 'pending' });
     const snap    = await firestore.collection('viajes').doc(viajeId).get();
-    expect(snap.data().estado).toBe('pending');
 
-    // finalizarViajeFretix requiere estado == 'en_curso'
-    const puedeFinalizar = snap.data().estado === 'en_curso';
+    const puedeFinalizar = snap.data().estado === 'en_transito';
     expect(puedeFinalizar).toBe(false);
+  });
+
+  test('transición inválida: no se puede confirmar carga desde aceptado', async () => {
+    await crearClienteDoc(uidCliente);
+    const viajeId = await crearViajeDoc(uidCliente, { estado: 'aceptado' });
+    const snap    = await firestore.collection('viajes').doc(viajeId).get();
+
+    const puedeConfirmar = snap.data().estado === 'en_curso';
+    expect(puedeConfirmar).toBe(false);
   });
 
   test('transición inválida: no se puede cancelar un viaje completado', async () => {
@@ -286,8 +344,7 @@ describe('viaje_lifecycle — ciclo completo (integración)', () => {
     const snap    = await firestore.collection('viajes').doc(viajeId).get();
 
     const ESTADOS_CANCELABLES = new Set(['pending', 'aceptado']);
-    const puedeCancelar = ESTADOS_CANCELABLES.has(snap.data().estado);
-    expect(puedeCancelar).toBe(false);
+    expect(ESTADOS_CANCELABLES.has(snap.data().estado)).toBe(false);
   });
 
   test('clienteData se escribe al aceptar (contacto desnormalizado)', async () => {
@@ -310,5 +367,44 @@ describe('viaje_lifecycle — ciclo completo (integración)', () => {
     expect(snap.data().clienteData.phone).toBe('+5492610000088');
     expect(snap.data().choferData.categoriaVehiculo).toBe('utilitario');
     expect(snap.data().choferData.phone).toBe('+5492610000099');
+  });
+
+  test('cargadoEn se escribe al confirmar carga', async () => {
+    await crearClienteDoc(uidCliente);
+    const viajeId  = await crearViajeDoc(uidCliente, { estado: 'en_curso' });
+    const viajeRef = firestore.collection('viajes').doc(viajeId);
+
+    await viajeRef.update({ estado: 'en_transito', cargadoEn: new Date() });
+
+    const snap = await viajeRef.get();
+    expect(snap.data().estado).toBe('en_transito');
+    expect(snap.data().cargadoEn).toBeDefined();
+  });
+
+  test('_ClienteGuard: cliente con viaje pending aparece en estados activos', async () => {
+    await crearClienteDoc(uidCliente);
+    const viajeId = await crearViajeDoc(uidCliente, { estado: 'pending' });
+
+    const snap = await firestore.collection('viajes')
+      .where('clienteUid', '==', uidCliente)
+      .where('estado', 'in', ['pending', 'aceptado', 'en_curso', 'en_transito'])
+      .limit(1)
+      .get();
+
+    expect(snap.empty).toBe(false);
+    expect(snap.docs[0].id).toBe(viajeId);
+  });
+
+  test('_ClienteGuard: cliente sin viaje activo no aparece', async () => {
+    await crearClienteDoc(uidCliente);
+    await crearViajeDoc(uidCliente, { estado: 'completado' });
+
+    const snap = await firestore.collection('viajes')
+      .where('clienteUid', '==', uidCliente)
+      .where('estado', 'in', ['pending', 'aceptado', 'en_curso', 'en_transito'])
+      .limit(1)
+      .get();
+
+    expect(snap.empty).toBe(true);
   });
 });

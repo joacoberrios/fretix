@@ -10,11 +10,8 @@ import '../../services/auth_service.dart';
 import '../../theme/fretix_colors.dart';
 
 // Misma clave que web/index.html — ya pública en el HTML del proyecto.
-// CPO-DP-05: verificar que esta clave tenga restricción de referrer HTTP
-// en Google Cloud Console para evitar uso no autorizado.
 const _kMapsApiKey = 'AIzaSyCPrygll6ye2BgPkP-wPSsTS7HoChs_lCw';
 
-// Dark map style — mismo que cotizacion_screen.dart (spec CTO).
 const _kMapStyleNocturno = r'''
 [
   {"elementType":"geometry","stylers":[{"color":"#1a1a1a"}]},
@@ -74,11 +71,10 @@ class _BuscandoChoferScreenState extends State<BuscandoChoferScreen> {
 
     setState(() => _cancelando = true);
     try {
-      final callable = FretixAuthService.instance.getCallable(
+      await FretixAuthService.instance.getCallable(
         'cancelarViajeFretix',
         timeout: const Duration(seconds: 15),
-      );
-      await callable.call({'viajeId': widget.viajeId});
+      ).call({'viajeId': widget.viajeId});
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -137,9 +133,7 @@ class _SearchingState extends StatelessWidget {
         SizedBox(height: 32),
         Text(
           'Buscando chofer...',
-          style: TextStyle(
-            color: FretixColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(color: FretixColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w700),
         ),
         SizedBox(height: 10),
         Padding(
@@ -176,17 +170,15 @@ class _ViajeWatcher extends StatelessWidget {
           .doc(viajeId)
           .snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const _SearchingState();
-        }
-        if (snap.hasError || !snap.hasData || !snap.data!.exists) {
-          return const _SearchingState();
-        }
+        if (snap.connectionState == ConnectionState.waiting) return const _SearchingState();
+        if (snap.hasError || !snap.hasData || !snap.data!.exists) return const _SearchingState();
 
         final data   = snap.data!.data() as Map<String, dynamic>;
         final estado = data['estado'] as String? ?? 'pending';
 
         switch (estado) {
+
+          // ── Chofer en camino al origen ────────────────────────────────────
           case 'aceptado':
             final choferData   = data['choferData'] as Map<String, dynamic>?;
             final nombre       = choferData?['displayName']       as String? ?? 'Tu chofer';
@@ -197,14 +189,11 @@ class _ViajeWatcher extends StatelessWidget {
             final origenLat    = (origenMap?['lat'] as num?)?.toDouble();
             final origenLng    = (origenMap?['lng'] as num?)?.toDouble();
             final origenLatLng = (origenLat != null && origenLng != null)
-                ? LatLng(origenLat, origenLng)
-                : null;
+                ? LatLng(origenLat, origenLng) : null;
             return StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('viajes')
-                  .doc(viajeId)
-                  .collection('tracking')
-                  .doc('actual')
+                  .collection('viajes').doc(viajeId)
+                  .collection('tracking').doc('actual')
                   .snapshots(),
               builder: (context, trackSnap) {
                 LatLng? choferPos;
@@ -227,21 +216,25 @@ class _ViajeWatcher extends StatelessWidget {
               },
             );
 
+          // ── Chofer en el origen, cargando ─────────────────────────────────
           case 'en_curso':
+            final choferData = data['choferData'] as Map<String, dynamic>?;
+            final nombre     = choferData?['displayName'] as String? ?? 'Tu chofer';
+            return _CargandoEnOrigenView(nombre: nombre);
+
+          // ── Chofer en camino al destino con la carga ──────────────────────
+          case 'en_transito':
             final choferData = data['choferData'] as Map<String, dynamic>?;
             final nombre     = choferData?['displayName'] as String? ?? 'Tu chofer';
             final destinoMap = data['destino'] as Map<String, dynamic>?;
             final destinoLat = (destinoMap?['lat'] as num?)?.toDouble();
             final destinoLng = (destinoMap?['lng'] as num?)?.toDouble();
             final destinoPos = (destinoLat != null && destinoLng != null)
-                ? LatLng(destinoLat, destinoLng)
-                : null;
+                ? LatLng(destinoLat, destinoLng) : null;
             return StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('viajes')
-                  .doc(viajeId)
-                  .collection('tracking')
-                  .doc('actual')
+                  .collection('viajes').doc(viajeId)
+                  .collection('tracking').doc('actual')
                   .snapshots(),
               builder: (context, trackSnap) {
                 LatLng? choferPos;
@@ -251,7 +244,7 @@ class _ViajeWatcher extends StatelessWidget {
                   final lng = (td?['lng'] as num?)?.toDouble();
                   if (lat != null && lng != null) choferPos = LatLng(lat, lng);
                 }
-                return _EnCursoView(
+                return _EnTransitoView(
                   nombre:        nombre,
                   choferPos:     choferPos,
                   destinoLatLng: destinoPos,
@@ -266,10 +259,10 @@ class _ViajeWatcher extends StatelessWidget {
               }
             });
             return const _FinView(
-              icon:     Icons.check_circle_outline,
-              color:    FretixColors.success,
-              mensaje:  '¡Viaje completado!',
-              detalle:  'Gracias por usar Fretix.',
+              icon:    Icons.check_circle_outline,
+              color:   FretixColors.success,
+              mensaje: '¡Viaje completado!',
+              detalle: 'Gracias por usar Fretix.',
             );
 
           case 'cancelado':
@@ -279,14 +272,13 @@ class _ViajeWatcher extends StatelessWidget {
               }
             });
             return const _FinView(
-              icon:     Icons.cancel_outlined,
-              color:    FretixColors.danger,
-              mensaje:  'Viaje cancelado',
-              detalle:  'Podés pedir un nuevo viaje cuando quieras.',
+              icon:    Icons.cancel_outlined,
+              color:   FretixColors.danger,
+              mensaje: 'Viaje cancelado',
+              detalle: 'Podés pedir un nuevo viaje cuando quieras.',
             );
 
           default:
-            // pending o estado desconocido
             return _PendingView(cancelando: cancelando, onCancelar: onCancelar);
         }
       },
@@ -331,9 +323,8 @@ class _PendingView extends StatelessWidget {
           onPressed: cancelando ? null : onCancelar,
           child: cancelando
               ? const SizedBox(
-                  width:  16,
-                  height: 16,
-                  child:  CircularProgressIndicator(color: FretixColors.danger, strokeWidth: 2),
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(color: FretixColors.danger, strokeWidth: 2),
                 )
               : const Text(
                   'Cancelar pedido',
@@ -345,7 +336,7 @@ class _PendingView extends StatelessWidget {
   }
 }
 
-// ── Chofer asignado ───────────────────────────────────────────────────────────
+// ── Chofer en camino al origen (aceptado) ─────────────────────────────────────
 
 class _ChoferAsignadoView extends StatefulWidget {
   const _ChoferAsignadoView({
@@ -362,7 +353,7 @@ class _ChoferAsignadoView extends StatefulWidget {
   final String  nombre;
   final String? photoURL;
   final String? categoria;
-  final int?    etaFallback;   // duracionMin de la cotización — usado si Directions API falla
+  final int?    etaFallback;
   final bool         cancelando;
   final VoidCallback onCancelar;
   final LatLng? choferPos;
@@ -374,7 +365,7 @@ class _ChoferAsignadoView extends StatefulWidget {
 
 class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
   GoogleMapController? _mapController;
-  int? _etaCalculado;   // minutos calculados por Directions API
+  int? _etaCalculado;
   bool _etaLoading = false;
 
   @override
@@ -386,7 +377,6 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
   @override
   void didUpdateWidget(covariant _ChoferAsignadoView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Recalcula ETA solo cuando la posición del chofer cambia (valor distinto).
     if (widget.choferPos != oldWidget.choferPos && widget.choferPos != null) {
       _recalcularEta();
     }
@@ -417,17 +407,15 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
         final body   = jsonDecode(response.body) as Map<String, dynamic>;
         final routes = body['routes'] as List?;
         if (routes != null && routes.isNotEmpty) {
-          final leg      = ((routes.first as Map)['legs'] as List?)?.first as Map?;
-          final durSecs  = (leg?['duration']?['value'] as num?)?.toInt();
+          final leg     = ((routes.first as Map)['legs'] as List?)?.first as Map?;
+          final durSecs = (leg?['duration']?['value'] as num?)?.toInt();
           if (durSecs != null) {
             setState(() { _etaCalculado = (durSecs / 60).ceil(); _etaLoading = false; });
             return;
           }
         }
       }
-    } catch (_) {
-      // Fallback al duracionMin — no bloqueante.
-    }
+    } catch (_) {}
     if (mounted) setState(() => _etaLoading = false);
   }
 
@@ -438,19 +426,21 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
 
     return Column(
       children: [
-        // Mapa en tiempo real — solo cuando hay posición del chofer Y coords de origen.
-        if (widget.origenLatLng != null)
+        if (widget.origenLatLng != null) ...[
           SizedBox(
             height: 200,
             child: _MapaCliente(
-              origenPos:    widget.origenLatLng!,
-              choferPos:    widget.choferPos,
-              onMapCreated: (ctrl) async {
+              referenciaPos: widget.origenLatLng!,
+              choferPos:     widget.choferPos,
+              onMapCreated:  (ctrl) async {
                 _mapController = ctrl;
                 await ctrl.setMapStyle(_kMapStyleNocturno);
               },
             ),
           ),
+          // TAREA F: badge cuando el chofer aún no emitió posición GPS
+          if (widget.choferPos == null) const _EsperandoUbicacionBadge(),
+        ],
         Expanded(
           child: SingleChildScrollView(
             child: Padding(
@@ -459,40 +449,20 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 24),
-                  Container(
-                    width:  96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: FretixColors.surface,
-                      border: Border.all(color: FretixColors.accent, width: 2),
-                    ),
-                    child: widget.photoURL != null
-                        ? ClipOval(
-                            child: Image.network(
-                              widget.photoURL!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _DefaultAvatar(nombre: widget.nombre),
-                            ),
-                          )
-                        : _DefaultAvatar(nombre: widget.nombre),
-                  ),
+                  _AvatarChofer(nombre: widget.nombre, photoURL: widget.photoURL),
                   const SizedBox(height: 24),
                   const Text(
-                    '¡Chofer en camino!',
+                    '¡Chofer en camino a buscar tu carga!',
                     style: TextStyle(
-                      color:      FretixColors.success,
-                      fontSize:   22,
-                      fontWeight: FontWeight.w700,
+                      color: FretixColors.success, fontSize: 20, fontWeight: FontWeight.w700,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     widget.nombre,
                     style: const TextStyle(
-                      color:      FretixColors.textPrimary,
-                      fontSize:   18,
-                      fontWeight: FontWeight.w600,
+                      color: FretixColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600,
                     ),
                   ),
                   if (widget.categoria != null) ...[
@@ -504,31 +474,10 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
                   ],
                   if (etaDisplay != null || _etaLoading) ...[
                     const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      decoration: BoxDecoration(
-                        color:        FretixColors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.schedule_outlined, color: FretixColors.accent, size: 18),
-                          const SizedBox(width: 8),
-                          if (_etaLoading)
-                            const SizedBox(
-                              width:  14, height: 14,
-                              child:  CircularProgressIndicator(color: FretixColors.accent, strokeWidth: 2),
-                            )
-                          else
-                            Text(
-                              etaEsReal
-                                  ? 'ETA: $etaDisplay min'
-                                  : 'ETA estimada: $etaDisplay min',
-                              style: const TextStyle(color: FretixColors.textSecondary, fontSize: 14),
-                            ),
-                        ],
-                      ),
+                    _EtaBadge(
+                      eta:     etaDisplay,
+                      loading: _etaLoading,
+                      label:   etaEsReal ? 'ETA' : 'ETA estimada',
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -538,9 +487,7 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
                       'Quedá en el punto de origen para que el chofer pueda encontrarte.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color:    FretixColors.textSecondary,
-                        fontSize: 13,
-                        height:   1.6,
+                        color: FretixColors.textSecondary, fontSize: 13, height: 1.6,
                       ),
                     ),
                   ),
@@ -549,9 +496,8 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
                     onPressed: widget.cancelando ? null : widget.onCancelar,
                     child: widget.cancelando
                         ? const SizedBox(
-                            width:  16,
-                            height: 16,
-                            child:  CircularProgressIndicator(color: FretixColors.danger, strokeWidth: 2),
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(color: FretixColors.danger, strokeWidth: 2),
                           )
                         : const Text(
                             'Cancelar pedido',
@@ -582,19 +528,67 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
   }
 }
 
-// ── En curso ──────────────────────────────────────────────────────────────────
+// ── Chofer cargando en el origen (en_curso) ───────────────────────────────────
 
-class _EnCursoView extends StatefulWidget {
-  const _EnCursoView({required this.nombre, this.choferPos, this.destinoLatLng});
-  final String  nombre;
-  final LatLng? choferPos;
-  final LatLng? destinoLatLng;   // destino del viaje — ETA y marcador del mapa
+class _CargandoEnOrigenView extends StatelessWidget {
+  const _CargandoEnOrigenView({required this.nombre});
+  final String nombre;
 
   @override
-  State<_EnCursoView> createState() => _EnCursoViewState();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              color: FretixColors.accent.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.inventory_2_outlined, color: FretixColors.accent, size: 40),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Cargando en origen',
+            style: TextStyle(
+              color: FretixColors.accent, fontSize: 22, fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$nombre está cargando tu mercadería',
+            style: const TextStyle(
+              color: FretixColors.textSecondary, fontSize: 14, height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'En breve saldrá rumbo al destino.',
+            style: TextStyle(color: FretixColors.textMuted, fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _EnCursoViewState extends State<_EnCursoView> {
+// ── Chofer en camino al destino con la carga (en_transito) ───────────────────
+
+class _EnTransitoView extends StatefulWidget {
+  const _EnTransitoView({required this.nombre, this.choferPos, this.destinoLatLng});
+  final String  nombre;
+  final LatLng? choferPos;
+  final LatLng? destinoLatLng;
+
+  @override
+  State<_EnTransitoView> createState() => _EnTransitoViewState();
+}
+
+class _EnTransitoViewState extends State<_EnTransitoView> {
   GoogleMapController? _mapController;
   int?  _etaCalculado;
   bool  _etaLoading = false;
@@ -606,7 +600,7 @@ class _EnCursoViewState extends State<_EnCursoView> {
   }
 
   @override
-  void didUpdateWidget(covariant _EnCursoView oldWidget) {
+  void didUpdateWidget(covariant _EnTransitoView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.choferPos != oldWidget.choferPos && widget.choferPos != null) {
       _recalcularEta();
@@ -646,7 +640,7 @@ class _EnCursoViewState extends State<_EnCursoView> {
           }
         }
       }
-    } catch (_) { /* best-effort — sin ETA calculado */ }
+    } catch (_) {}
     if (mounted) setState(() => _etaLoading = false);
   }
 
@@ -654,18 +648,20 @@ class _EnCursoViewState extends State<_EnCursoView> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (widget.destinoLatLng != null)
+        if (widget.destinoLatLng != null) ...[
           SizedBox(
             height: 200,
             child: _MapaCliente(
-              origenPos:    widget.destinoLatLng!,   // marcador naranja = destino del viaje
-              choferPos:    widget.choferPos,
-              onMapCreated: (ctrl) async {
+              referenciaPos: widget.destinoLatLng!,
+              choferPos:     widget.choferPos,
+              onMapCreated:  (ctrl) async {
                 _mapController = ctrl;
                 await ctrl.setMapStyle(_kMapStyleNocturno);
               },
             ),
           ),
+          if (widget.choferPos == null) const _EsperandoUbicacionBadge(),
+        ],
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -674,59 +670,31 @@ class _EnCursoViewState extends State<_EnCursoView> {
               children: [
                 const SizedBox(height: 16),
                 Container(
-                  width:  80,
-                  height: 80,
+                  width: 80, height: 80,
                   decoration: BoxDecoration(
-                    color:  FretixColors.success.withOpacity(0.12),
+                    color: FretixColors.success.withOpacity(0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.local_shipping_rounded, color: FretixColors.success, size: 40),
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Viaje en curso',
+                  'En camino a destino',
                   style: TextStyle(
-                    color:      FretixColors.success,
-                    fontSize:   22,
-                    fontWeight: FontWeight.w700,
+                    color: FretixColors.success, fontSize: 22, fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '${widget.nombre} está llevando tu carga',
                   style: const TextStyle(
-                    color:    FretixColors.textSecondary,
-                    fontSize: 14,
-                    height:   1.5,
+                    color: FretixColors.textSecondary, fontSize: 14, height: 1.5,
                   ),
                   textAlign: TextAlign.center,
                 ),
                 if (_etaCalculado != null || _etaLoading) ...[
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color:        FretixColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.schedule_outlined, color: FretixColors.accent, size: 18),
-                        const SizedBox(width: 8),
-                        if (_etaLoading)
-                          const SizedBox(
-                            width: 14, height: 14,
-                            child: CircularProgressIndicator(color: FretixColors.accent, strokeWidth: 2),
-                          )
-                        else
-                          Text(
-                            'ETA a destino: $_etaCalculado min',
-                            style: const TextStyle(color: FretixColors.textSecondary, fontSize: 14),
-                          ),
-                      ],
-                    ),
-                  ),
+                  _EtaBadge(eta: _etaCalculado, loading: _etaLoading, label: 'ETA a destino'),
                 ],
                 const SizedBox(height: 16),
                 const Text(
@@ -739,49 +707,6 @@ class _EnCursoViewState extends State<_EnCursoView> {
           ),
         ),
       ],
-    );
-  }
-}
-
-// ── Mapa del cliente (origen + posición del chofer) ───────────────────────────
-
-class _MapaCliente extends StatelessWidget {
-  const _MapaCliente({
-    required this.origenPos,
-    this.choferPos,
-    required this.onMapCreated,
-  });
-
-  final LatLng  origenPos;
-  final LatLng? choferPos;
-  final void Function(GoogleMapController) onMapCreated;
-
-  @override
-  Widget build(BuildContext context) {
-    final markers = <Marker>{
-      Marker(
-        markerId: const MarkerId('origen'),
-        position: origenPos,
-        icon:     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-      ),
-      if (choferPos != null)
-        Marker(
-          markerId: const MarkerId('chofer'),
-          position: choferPos!,
-          icon:     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        ),
-    };
-
-    final target = choferPos ?? origenPos;
-
-    return GoogleMap(
-      initialCameraPosition:   CameraPosition(target: target, zoom: 13),
-      markers:                 markers,
-      onMapCreated:            onMapCreated,
-      myLocationButtonEnabled: false,
-      zoomControlsEnabled:     false,
-      mapToolbarEnabled:       false,
-      compassEnabled:          false,
     );
   }
 }
@@ -809,11 +734,7 @@ class _FinView extends StatelessWidget {
         const SizedBox(height: 16),
         Text(
           mensaje,
-          style: TextStyle(
-            color:      color,
-            fontSize:   22,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         Padding(
@@ -834,6 +755,143 @@ class _FinView extends StatelessWidget {
   }
 }
 
+// ── Mapa del cliente (punto de referencia + posición del chofer) ──────────────
+// referenciaPos: origen en estado aceptado, destino en estado en_transito.
+
+class _MapaCliente extends StatelessWidget {
+  const _MapaCliente({
+    required this.referenciaPos,
+    this.choferPos,
+    required this.onMapCreated,
+  });
+
+  final LatLng  referenciaPos;
+  final LatLng? choferPos;
+  final void Function(GoogleMapController) onMapCreated;
+
+  @override
+  Widget build(BuildContext context) {
+    final markers = <Marker>{
+      Marker(
+        markerId: const MarkerId('referencia'),
+        position: referenciaPos,
+        icon:     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+      ),
+      if (choferPos != null)
+        Marker(
+          markerId: const MarkerId('chofer'),
+          position: choferPos!,
+          icon:     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        ),
+    };
+
+    return GoogleMap(
+      initialCameraPosition:   CameraPosition(target: choferPos ?? referenciaPos, zoom: 13),
+      markers:                 markers,
+      onMapCreated:            onMapCreated,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled:     false,
+      mapToolbarEnabled:       false,
+      compassEnabled:          false,
+    );
+  }
+}
+
+// ── Badge "Esperando ubicación" (TAREA F) ─────────────────────────────────────
+
+class _EsperandoUbicacionBadge extends StatelessWidget {
+  const _EsperandoUbicacionBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width:   double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      color:   FretixColors.surface,
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 10, height: 10,
+            child: CircularProgressIndicator(color: FretixColors.textMuted, strokeWidth: 1.5),
+          ),
+          SizedBox(width: 8),
+          Text(
+            'Esperando ubicación del chofer...',
+            style: TextStyle(color: FretixColors.textMuted, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Badge ETA ─────────────────────────────────────────────────────────────────
+
+class _EtaBadge extends StatelessWidget {
+  const _EtaBadge({required this.eta, required this.loading, required this.label});
+  final int?   eta;
+  final bool   loading;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color:        FretixColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.schedule_outlined, color: FretixColors.accent, size: 18),
+          const SizedBox(width: 8),
+          if (loading)
+            const SizedBox(
+              width: 14, height: 14,
+              child: CircularProgressIndicator(color: FretixColors.accent, strokeWidth: 2),
+            )
+          else
+            Text(
+              '$label: $eta min',
+              style: const TextStyle(color: FretixColors.textSecondary, fontSize: 14),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Avatar del chofer ─────────────────────────────────────────────────────────
+
+class _AvatarChofer extends StatelessWidget {
+  const _AvatarChofer({required this.nombre, this.photoURL});
+  final String  nombre;
+  final String? photoURL;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 96, height: 96,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: FretixColors.surface,
+        border: Border.all(color: FretixColors.accent, width: 2),
+      ),
+      child: photoURL != null
+          ? ClipOval(
+              child: Image.network(
+                photoURL!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _DefaultAvatar(nombre: nombre),
+              ),
+            )
+          : _DefaultAvatar(nombre: nombre),
+    );
+  }
+}
+
 class _DefaultAvatar extends StatelessWidget {
   const _DefaultAvatar({required this.nombre});
   final String nombre;
@@ -845,9 +903,7 @@ class _DefaultAvatar extends StatelessWidget {
       child: Text(
         inicial,
         style: const TextStyle(
-          color:      FretixColors.accent,
-          fontSize:   36,
-          fontWeight: FontWeight.w700,
+          color: FretixColors.accent, fontSize: 36, fontWeight: FontWeight.w700,
         ),
       ),
     );

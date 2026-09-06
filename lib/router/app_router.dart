@@ -78,7 +78,7 @@ abstract class AppRouter {
         return _fadeRoute(const RoleSelectionScreen(), settings);
 
       case homeCliente:
-        return _fadeRoute(const HomeClienteScreen(), settings);
+        return _fadeRoute(const _ClienteGuard(), settings);
 
       case homeChofer:
         return _fadeRoute(const _ChoferGuard(), settings);
@@ -311,7 +311,7 @@ class _ChoferGuardState extends State<_ChoferGuard> {
           stream: FirebaseFirestore.instance
               .collection('viajes')
               .where('choferUid', isEqualTo: uid)
-              .where('estado', whereIn: ['aceptado', 'en_curso'])
+              .where('estado', whereIn: ['aceptado', 'en_curso', 'en_transito'])
               .limit(1)
               .snapshots(),
           builder: (context, viajeSnap) {
@@ -386,6 +386,65 @@ class _ErrorCargaScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Cliente route guard ──────────────────────────────────────────────────────
+//
+// Equivalente simétrico de _ChoferGuard para el cliente. Escucha en tiempo real
+// si el cliente tiene un viaje activo (pending, aceptado, en_curso, en_transito).
+// Si lo hay, monta BuscandoChoferScreen directamente — sin F5. Si no hay, monta
+// HomeClienteScreen normal. Ante error de red, muestra _ErrorCargaScreen igual
+// que _ChoferGuard (no asume "sin viaje" frente a un fallo de conectividad).
+
+class _ClienteGuard extends StatefulWidget {
+  const _ClienteGuard();
+
+  @override
+  State<_ClienteGuard> createState() => _ClienteGuardState();
+}
+
+class _ClienteGuardState extends State<_ClienteGuard> {
+  static const _spinner = Scaffold(
+    backgroundColor: Color(0xFF0D0D0D),
+    body: Center(child: CircularProgressIndicator(color: Color(0xFFD4A373))),
+  );
+
+  String? _uid;
+
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = _uid;
+    if (uid == null) return const HomeClienteScreen();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('viajes')
+          .where('clienteUid', isEqualTo: uid)
+          .where('estado', whereIn: ['pending', 'aceptado', 'en_curso', 'en_transito'])
+          .limit(1)
+          .snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) return _spinner;
+        if (snap.hasError) {
+          return _ErrorCargaScreen(onReintentar: () {
+            Navigator.pushNamedAndRemoveUntil(
+                context, AppRouter.homeCliente, (_) => false);
+          });
+        }
+        final docs = snap.data?.docs;
+        if (docs != null && docs.isNotEmpty) {
+          return BuscandoChoferScreen(viajeId: docs.first.id);
+        }
+        return const HomeClienteScreen();
+      },
     );
   }
 }

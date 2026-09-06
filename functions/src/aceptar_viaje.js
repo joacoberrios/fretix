@@ -59,7 +59,7 @@ exports.aceptarViajeFretix = onCall(
     // Admin SDK bypasea Firestore rules — puede consultar viajes de cualquier uid.
     const activoSnap = await db.collection('viajes')
       .where('choferUid', '==', uid)
-      .where('estado', 'in', ['aceptado', 'en_curso'])
+      .where('estado', 'in', ['aceptado', 'en_curso', 'en_transito'])
       .limit(1)
       .get();
 
