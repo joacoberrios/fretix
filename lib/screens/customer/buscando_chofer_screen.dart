@@ -181,7 +181,7 @@ class _ViajeWatcher extends StatelessWidget {
             return _EnCursoView(nombre: nombre);
 
           case 'completado':
-            WidgetsBinding.instance.addPostFrameCallback((_) {
+            Future.delayed(const Duration(seconds: 3), () {
               if (context.mounted) {
                 Navigator.pushNamedAndRemoveUntil(context, AppRouter.homeCliente, (_) => false);
               }
@@ -194,7 +194,7 @@ class _ViajeWatcher extends StatelessWidget {
             );
 
           case 'cancelado':
-            WidgetsBinding.instance.addPostFrameCallback((_) {
+            Future.delayed(const Duration(seconds: 3), () {
               if (context.mounted) {
                 Navigator.pushNamedAndRemoveUntil(context, AppRouter.homeCliente, (_) => false);
               }
