@@ -27,17 +27,25 @@ const _kDestinoMock = LatLng(-32.9500, -68.8700);
 const _kMapStyleNocturno = r'''
 [
   {"elementType":"geometry","stylers":[{"color":"#080f1c"}]},
-  {"elementType":"labels.text.fill","stylers":[{"color":"#555555"}]},
+  {"elementType":"labels.text.fill","stylers":[{"color":"#2a3547"}]},
   {"elementType":"labels.text.stroke","stylers":[{"color":"#080f1c"}]},
+  {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
   {"featureType":"landscape","elementType":"geometry","stylers":[{"color":"#080f1c"}]},
   {"featureType":"poi","stylers":[{"visibility":"off"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#d3dbe3"}]},
-  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#0d1829"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#d3dbe3"}]},
-  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#080f1c"}]},
+  {"featureType":"road.local","elementType":"geometry","stylers":[{"color":"#0d1829"}]},
+  {"featureType":"road.local","elementType":"geometry.stroke","stylers":[{"color":"#080f1c"}]},
+  {"featureType":"road.local","elementType":"labels","stylers":[{"visibility":"off"}]},
+  {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#111d2e"}]},
+  {"featureType":"road.arterial","elementType":"geometry.stroke","stylers":[{"color":"#080f1c"}]},
+  {"featureType":"road.arterial","elementType":"labels","stylers":[{"visibility":"off"}]},
+  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#1a2d45"}]},
+  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#0d1829"}]},
+  {"featureType":"road.highway","elementType":"labels","stylers":[{"visibility":"off"}]},
   {"featureType":"transit","stylers":[{"visibility":"off"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#080f1c"}]},
-  {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#0d1829"}]}
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#060c16"}]},
+  {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#0d1829"}]},
+  {"featureType":"administrative","elementType":"labels.text.fill","stylers":[{"color":"#2a3547"}]},
+  {"featureType":"administrative","elementType":"labels.text.stroke","stylers":[{"color":"#080f1c"}]}
 ]
 ''';
 
@@ -261,12 +269,16 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
     Marker(
       markerId: const MarkerId('origen'),
       position: _origen,
+      // hueAzure: consistente con FretixColors.accent (Azul Acero).
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
     ),
     Marker(
       markerId: const MarkerId('destino'),
       position: _destino,
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+      // hueYellow: excepción funcional — diferenciación navegacional A→B.
+      // No es parte del design system; complementario al azul para máximo
+      // contraste en fondo oscuro (#080f1c) sin ambigüedad con la polyline.
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow),
     ),
   };
 
