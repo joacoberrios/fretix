@@ -1,9 +1,31 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../router/app_router.dart';
 import '../../services/auth_service.dart';
 import '../../theme/fretix_colors.dart';
+
+// Dark map style — mismo que cotizacion_screen.dart (spec CTO: solo mapa nocturno).
+const _kMapStyleNocturno = r'''
+[
+  {"elementType":"geometry","stylers":[{"color":"#1a1a1a"}]},
+  {"elementType":"labels.text.fill","stylers":[{"color":"#555555"}]},
+  {"elementType":"labels.text.stroke","stylers":[{"color":"#0d0d0d"}]},
+  {"featureType":"landscape","elementType":"geometry","stylers":[{"color":"#111111"}]},
+  {"featureType":"poi","stylers":[{"visibility":"off"}]},
+  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a2a2a"}]},
+  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#111111"}]},
+  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#333333"}]},
+  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#1a1a1a"}]},
+  {"featureType":"transit","stylers":[{"visibility":"off"}]},
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0d0d0d"}]},
+  {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#2a2a2a"}]}
+]
+''';
 
 class ViajeActivoScreen extends StatefulWidget {
   const ViajeActivoScreen({super.key, required this.viajeId});
@@ -18,6 +40,89 @@ class _ViajeActivoScreenState extends State<ViajeActivoScreen> {
   bool _iniciando   = false;
   bool _finalizando = false;
   bool _cancelando  = false;
+
+  // ── GPS tracking ────────────────────────────────────────────────────────────
+  Position?                     _currentPosition;
+  StreamSubscription<Position>? _positionSub;
+  Timer?                        _trackingTimer;
+  bool                          _locationDenied = false;
+  GoogleMapController?          _mapController;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTracking();
+  }
+
+  @override
+  void dispose() {
+    _stopTracking();
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  // Solicita permiso de ubicación y arranca el stream de posición.
+  // Se llama en initState (primera vez que el chofer tiene un viaje activo).
+  Future<void> _startTracking() async {
+    LocationPermission perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      if (mounted) setState(() => _locationDenied = true);
+      return;
+    }
+
+    // Dispara un evento cada 50 m de desplazamiento (throttle espacial).
+    _positionSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy:       LocationAccuracy.high,
+        distanceFilter: 50,
+      ),
+    ).listen((pos) {
+      _currentPosition = pos;
+      if (mounted) setState(() {});
+      _writeTracking(pos.latitude, pos.longitude);
+      _updateMapCamera(pos);
+    });
+
+    // Throttle temporal: escribe cada 15 s aunque el chofer esté detenido.
+    _trackingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      final pos = _currentPosition;
+      if (pos != null) _writeTracking(pos.latitude, pos.longitude);
+    });
+  }
+
+  void _stopTracking() {
+    _positionSub?.cancel();
+    _positionSub = null;
+    _trackingTimer?.cancel();
+    _trackingTimer = null;
+  }
+
+  Future<void> _writeTracking(double lat, double lng) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('viajes')
+          .doc(widget.viajeId)
+          .collection('tracking')
+          .doc('actual')
+          .set({
+        'lat':          lat,
+        'lng':          lng,
+        'actualizadoEn': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Tracking es best-effort — no bloquea el viaje si falla.
+    }
+  }
+
+  void _updateMapCamera(Position pos) {
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLng(LatLng(pos.latitude, pos.longitude)),
+    );
+  }
 
   Future<void> _iniciarViaje() async {
     if (_iniciando) return;
@@ -159,25 +264,49 @@ class _ViajeActivoScreenState extends State<ViajeActivoScreen> {
             final data   = snap.data!.data() as Map<String, dynamic>;
             final estado = data['estado'] as String? ?? 'pending';
 
-            // Cuando el viaje termina (completado o cancelado), volver a home.
+            // Cuando el viaje termina (completado o cancelado), detener tracking y volver a home.
             if (estado == 'completado' || estado == 'cancelado') {
+              _stopTracking();
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) _volverAHome();
               });
               return _EstadoFinalView(estado: estado);
             }
 
-            final clienteData  = data['clienteData']  as Map<String, dynamic>?;
-            final origen       = data['origen']        as Map<String, dynamic>?;
-            final destino      = data['destino']       as Map<String, dynamic>?;
+            final clienteData   = data['clienteData']  as Map<String, dynamic>?;
+            final origen        = data['origen']        as Map<String, dynamic>?;
+            final destino       = data['destino']       as Map<String, dynamic>?;
             final clienteNombre = clienteData?['displayName'] as String? ?? 'Cliente';
-            final clienteTel   = clienteData?['phone']        as String?;
-            final origenAddr   = origen?['address']  as String? ?? '—';
-            final destinoAddr  = destino?['address'] as String? ?? '—';
+            final clienteTel    = clienteData?['phone']        as String?;
+            final origenAddr    = origen?['address']  as String? ?? '—';
+            final destinoAddr   = destino?['address'] as String? ?? '—';
+            final origenLat     = (origen?['lat'] as num?)?.toDouble();
+            final origenLng     = (origen?['lng'] as num?)?.toDouble();
+
+            final origenLatLng = (origenLat != null && origenLng != null)
+                ? LatLng(origenLat, origenLng)
+                : null;
+            final choferLatLng = _currentPosition != null
+                ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+                : null;
 
             return Column(
               children: [
                 _Header(estado: estado, viajeId: widget.viajeId),
+                if (origenLatLng != null)
+                  SizedBox(
+                    height: 200,
+                    child: _MapaChofer(
+                      origenPos:    origenLatLng,
+                      choferPos:    choferLatLng,
+                      onMapCreated: (ctrl) async {
+                        _mapController = ctrl;
+                        await ctrl.setMapStyle(_kMapStyleNocturno);
+                      },
+                    ),
+                  ),
+                if (_locationDenied)
+                  const _UbicacionDenegadaBanner(),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -591,6 +720,76 @@ class _EstadoFinalView extends StatelessWidget {
           const Text(
             'Volviendo al inicio...',
             style: TextStyle(color: FretixColors.textSecondary, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Mapa del chofer (origen + posición propia) ────────────────────────────────
+
+class _MapaChofer extends StatelessWidget {
+  const _MapaChofer({
+    required this.origenPos,
+    this.choferPos,
+    required this.onMapCreated,
+  });
+
+  final LatLng  origenPos;
+  final LatLng? choferPos;
+  final void Function(GoogleMapController) onMapCreated;
+
+  @override
+  Widget build(BuildContext context) {
+    final markers = <Marker>{
+      Marker(
+        markerId: const MarkerId('origen'),
+        position: origenPos,
+        icon:     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+      ),
+      if (choferPos != null)
+        Marker(
+          markerId: const MarkerId('chofer'),
+          position: choferPos!,
+          icon:     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        ),
+    };
+
+    final target = choferPos ?? origenPos;
+
+    return GoogleMap(
+      initialCameraPosition:   CameraPosition(target: target, zoom: 13),
+      markers:                 markers,
+      onMapCreated:            onMapCreated,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled:     false,
+      mapToolbarEnabled:       false,
+      compassEnabled:          false,
+    );
+  }
+}
+
+// ── Banner de ubicación denegada ──────────────────────────────────────────────
+
+class _UbicacionDenegadaBanner extends StatelessWidget {
+  const _UbicacionDenegadaBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width:   double.infinity,
+      color:   FretixColors.danger.withOpacity(0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: const Row(
+        children: [
+          Icon(Icons.location_off_outlined, color: FretixColors.danger, size: 15),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Sin acceso a tu ubicación. El cliente no verá tu posición en el mapa.',
+              style: TextStyle(color: FretixColors.danger, fontSize: 12),
+            ),
           ),
         ],
       ),

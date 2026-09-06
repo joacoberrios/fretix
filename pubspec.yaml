@@ -23,6 +23,9 @@ dependencies:
   geolocator:                ^13.0.1
   flutter_polyline_points:   ^2.1.0
 
+  # ── HTTP (para Directions API client-side en TAREA 4 tracking) ──────────
+  http:                      ^1.2.2
+
   # ── UI / Utilidades ───────────────────────────────────────────────────────
   google_fonts:              ^6.2.1   # Fuente Inter
   cached_network_image:      ^3.4.1   # Avatares con caché
