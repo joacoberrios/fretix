@@ -234,86 +234,103 @@ class _AdminGuard extends StatelessWidget {
 // ─── Chofer route guard ───────────────────────────────────────────────────────
 //
 // Verifica onboardingRole en /users/{uid} antes de renderizar HomeChoferScreen.
-// onGenerateRoute es síncrono; el guard usa FutureBuilder igual que _AdminGuard.
-// Roles transportista: 'chofer' (independiente) y 'empresaTransporteMaestro'.
+// Diseño en dos capas:
+//   1. FutureBuilder (StatefulWidget, future cacheado en initState): rol y vehículo
+//      se resuelven una sola vez — no cambian durante la sesión.
+//   2. StreamBuilder anidado: viaje activo escucha en tiempo real, de modo que
+//      cuando el chofer acepta un viaje la UI reacciona sin necesitar F5.
+// Roles transportista: 'chofer_independiente' y 'empresa_transporte_maestro'.
 // No usa custom claims porque onboarding.js no llama setCustomUserClaims para
-// estos roles — la única fuente de verdad es el campo onboardingRole en Firestore.
+// estos roles — la única fuente de verdad es onboardingRole en Firestore.
 
-class _ChoferGuard extends StatelessWidget {
+class _ChoferGuard extends StatefulWidget {
   const _ChoferGuard();
 
+  @override
+  State<_ChoferGuard> createState() => _ChoferGuardState();
+}
+
+class _ChoferGuardState extends State<_ChoferGuard> {
   static const _rolesTransportista = {'chofer_independiente', 'empresa_transporte_maestro'};
 
-  @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return const _AccesoDenegadoScreen();
+  static const _spinner = Scaffold(
+    backgroundColor: Color(0xFF0D0D0D),
+    body: Center(child: CircularProgressIndicator(color: Color(0xFFD4A373))),
+  );
 
-    // Lee perfil, vehículo y viaje activo en paralelo para decidir qué pantalla mostrar.
-    // empresa_transporte_maestro sin vehículo registrado también pasa por
-    // SubirTarjetaVerdeScreen en esta versión (Tarea 11). El soporte de flota
-    // múltiple queda documentado como Tarea 11b (ver VALIDACION_LOG.md).
-    return FutureBuilder<List<Object>>(
-      future: Future.wait([
+  String? _uid;
+  Future<List<Object>>? _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    _uid = uid;
+    if (uid != null) {
+      _profileFuture = Future.wait([
         FirebaseFirestore.instance.collection('users').doc(uid).get(),
         FirebaseFirestore.instance
             .collection('vehiculos')
             .where('choferUid', isEqualTo: uid)
             .limit(1)
             .get(),
-        FirebaseFirestore.instance
-            .collection('viajes')
-            .where('choferUid', isEqualTo: uid)
-            .where('estado', whereIn: ['aceptado', 'en_curso'])
-            .limit(1)
-            .get(),
-      ]),
+      ]);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = _uid;
+    if (uid == null) return const _AccesoDenegadoScreen();
+
+    return FutureBuilder<List<Object>>(
+      future: _profileFuture,
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            backgroundColor: Color(0xFF0D0D0D),
-            body: Center(
-              child: CircularProgressIndicator(color: Color(0xFFD4A373)),
-            ),
-          );
-        }
-        // Error de red / permisos Firestore — causa técnica, no de rol.
-        // Mostrar pantalla de reintento distinta a "Acceso denegado" para
-        // no confundir un fallo temporal con una restricción de autorización.
-        if (snap.hasError) {
-          return _ErrorCargaScreen(onReintentar: () {
-            Navigator.pushNamedAndRemoveUntil(
-                context, AppRouter.homeChofer, (_) => false);
-          });
-        }
-        final results = snap.data;
-        // snap.data solo puede ser null aquí si la plataforma no completó
-        // el snapshot correctamente — tratar como error transitorio.
-        if (results == null) {
+        if (snap.connectionState != ConnectionState.done) return _spinner;
+
+        if (snap.hasError || snap.data == null) {
           return _ErrorCargaScreen(onReintentar: () {
             Navigator.pushNamedAndRemoveUntil(
                 context, AppRouter.homeChofer, (_) => false);
           });
         }
 
-        final userDoc       = results[0] as DocumentSnapshot;
-        final vehiculoSnap  = results[1] as QuerySnapshot;
-        final viajeActivo   = results[2] as QuerySnapshot;
+        final results      = snap.data!;
+        final userDoc      = results[0] as DocumentSnapshot;
+        final vehiculoSnap = results[1] as QuerySnapshot;
         final data = userDoc.data() as Map<String, dynamic>?;
         final rol  = data?['onboardingRole'] as String?;
 
-        // Rol no reconocido → acceso real denegado (no es un fallo técnico).
         if (rol == null || !_rolesTransportista.contains(rol)) {
           return const _AccesoDenegadoScreen();
         }
-        // Sin vehículo registrado → subida obligatoria antes de operar
         if (vehiculoSnap.docs.isEmpty) return const SubirTarjetaVerdeScreen();
-        // Viaje activo (aceptado o en_curso) → redirigir directamente a ViajeActivoScreen
-        if (viajeActivo.docs.isNotEmpty) {
-          final viajeId = viajeActivo.docs.first.id;
-          return ViajeActivoScreen(viajeId: viajeId);
-        }
-        return const HomeChoferScreen();
+
+        // Rol + vehículo OK — escuchar viaje activo en tiempo real.
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('viajes')
+              .where('choferUid', isEqualTo: uid)
+              .where('estado', whereIn: ['aceptado', 'en_curso'])
+              .limit(1)
+              .snapshots(),
+          builder: (context, viajeSnap) {
+            if (viajeSnap.connectionState == ConnectionState.waiting) {
+              return _spinner;
+            }
+            if (viajeSnap.hasError) {
+              return _ErrorCargaScreen(onReintentar: () {
+                Navigator.pushNamedAndRemoveUntil(
+                    context, AppRouter.homeChofer, (_) => false);
+              });
+            }
+            final docs = viajeSnap.data?.docs;
+            if (docs != null && docs.isNotEmpty) {
+              return ViajeActivoScreen(viajeId: docs.first.id);
+            }
+            return const HomeChoferScreen();
+          },
+        );
       },
     );
   }
