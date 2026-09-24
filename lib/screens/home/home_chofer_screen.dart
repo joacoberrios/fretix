@@ -238,7 +238,7 @@ class _DisponibilidadCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: disponible
-              ? FretixColors.success.withOpacity(0.4)
+              ? FretixColors.success.withValues(alpha: 0.4)
               : FretixColors.surfaceBorder,
         ),
       ),
@@ -248,7 +248,7 @@ class _DisponibilidadCard extends StatelessWidget {
             width:  48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -653,7 +653,7 @@ class _ViajeCard extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor:        FretixColors.accent,
                     foregroundColor:        Colors.black,
-                    disabledBackgroundColor: FretixColors.accent.withOpacity(0.45),
+                    disabledBackgroundColor: FretixColors.accent.withValues(alpha: 0.45),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(horizontal: 16),

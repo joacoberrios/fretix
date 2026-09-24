@@ -368,9 +368,8 @@ class _ViajeActivoScreenState extends State<ViajeActivoScreen> {
                     child: _MapaChofer(
                       origenPos:    origenLatLng,
                       choferPos:    choferLatLng,
-                      onMapCreated: (ctrl) async {
+                      onMapCreated: (ctrl) {
                         _mapController = ctrl;
-                        await ctrl.setMapStyle(_kMapStyleNocturno);
                       },
                     ),
                   ),
@@ -459,9 +458,9 @@ class _Header extends StatelessWidget {
               Container(
                 padding:    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color:        color.withOpacity(0.15),
+                  color:        color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border:       Border.all(color: color.withOpacity(0.4)),
+                  border:       Border.all(color: color.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   etiqueta,
@@ -762,7 +761,7 @@ class _BotonPrimario extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor:         color,
           foregroundColor:         Colors.black,
-          disabledBackgroundColor: color.withOpacity(0.4),
+          disabledBackgroundColor: color.withValues(alpha: 0.4),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           elevation: 0,
         ),
@@ -874,6 +873,7 @@ class _MapaChofer extends StatelessWidget {
 
     return GoogleMap(
       initialCameraPosition:   CameraPosition(target: choferPos ?? origenPos, zoom: 13),
+      style:                   _kMapStyleNocturno,
       markers:                 markers,
       onMapCreated:            onMapCreated,
       myLocationButtonEnabled: false,
@@ -893,7 +893,7 @@ class _UbicacionDenegadaBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width:   double.infinity,
-      color:   FretixColors.danger.withOpacity(0.08),
+      color:   FretixColors.danger.withValues(alpha: 0.08),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: const Row(
         children: [

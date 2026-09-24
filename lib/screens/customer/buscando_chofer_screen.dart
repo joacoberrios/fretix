@@ -440,9 +440,8 @@ class _ChoferAsignadoViewState extends State<_ChoferAsignadoView> {
             child: _MapaCliente(
               referenciaPos: widget.origenLatLng!,
               choferPos:     widget.choferPos,
-              onMapCreated:  (ctrl) async {
+              onMapCreated:  (ctrl) {
                 _mapController = ctrl;
-                await ctrl.setMapStyle(_kMapStyleNocturno);
               },
             ),
           ),
@@ -552,7 +551,7 @@ class _CargandoEnOrigenView extends StatelessWidget {
           Container(
             width: 80, height: 80,
             decoration: BoxDecoration(
-              color: FretixColors.accent.withOpacity(0.12),
+              color: FretixColors.accent.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.inventory_2_outlined, color: FretixColors.accent, size: 40),
@@ -662,9 +661,8 @@ class _EnTransitoViewState extends State<_EnTransitoView> {
             child: _MapaCliente(
               referenciaPos: widget.destinoLatLng!,
               choferPos:     widget.choferPos,
-              onMapCreated:  (ctrl) async {
+              onMapCreated:  (ctrl) {
                 _mapController = ctrl;
-                await ctrl.setMapStyle(_kMapStyleNocturno);
               },
             ),
           ),
@@ -680,7 +678,7 @@ class _EnTransitoViewState extends State<_EnTransitoView> {
                 Container(
                   width: 80, height: 80,
                   decoration: BoxDecoration(
-                    color: FretixColors.success.withOpacity(0.12),
+                    color: FretixColors.success.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.local_shipping_rounded, color: FretixColors.success, size: 40),
@@ -795,6 +793,7 @@ class _MapaCliente extends StatelessWidget {
 
     return GoogleMap(
       initialCameraPosition:   CameraPosition(target: choferPos ?? referenciaPos, zoom: 13),
+      style:                   _kMapStyleNocturno,
       markers:                 markers,
       onMapCreated:            onMapCreated,
       myLocationButtonEnabled: false,

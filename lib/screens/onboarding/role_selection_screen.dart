@@ -291,7 +291,7 @@ class _PasoIndicador extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(2),
                 color: activo
-                    ? (esCurrent ? FretixColors.accent : FretixColors.accent.withOpacity(0.45))
+                    ? (esCurrent ? FretixColors.accent : FretixColors.accent.withValues(alpha: 0.45))
                     : FretixColors.surfaceBorder,
               ),
             ),
@@ -669,12 +669,12 @@ class _MacroCardState extends State<_MacroCard> {
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
           color:        _pressed
-              ? FretixColors.surface.withOpacity(0.8)
+              ? FretixColors.surface.withValues(alpha: 0.8)
               : FretixColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: _pressed
-                ? FretixColors.accent.withOpacity(0.6)
+                ? FretixColors.accent.withValues(alpha: 0.6)
                 : FretixColors.surfaceBorder,
             width: 1.5,
           ),
@@ -685,7 +685,7 @@ class _MacroCardState extends State<_MacroCard> {
               width:  52,
               height: 52,
               decoration: BoxDecoration(
-                color:        FretixColors.accent.withOpacity(0.12),
+                color:        FretixColors.accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
@@ -771,12 +771,12 @@ class _SubRolCardState extends State<_SubRolCard> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         decoration: BoxDecoration(
           color:        _pressed
-              ? FretixColors.surface.withOpacity(0.8)
+              ? FretixColors.surface.withValues(alpha: 0.8)
               : FretixColors.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: _pressed
-                ? FretixColors.accent.withOpacity(0.6)
+                ? FretixColors.accent.withValues(alpha: 0.6)
                 : FretixColors.surfaceBorder,
             width: 1.5,
           ),
@@ -787,7 +787,7 @@ class _SubRolCardState extends State<_SubRolCard> {
               width:  46,
               height: 46,
               decoration: BoxDecoration(
-                color:        FretixColors.accent.withOpacity(0.1),
+                color:        FretixColors.accent.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(widget.icono, color: FretixColors.accent, size: 22),
@@ -813,7 +813,7 @@ class _SubRolCardState extends State<_SubRolCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
-                            color:        FretixColors.accent.withOpacity(0.15),
+                            color:        FretixColors.accent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -864,10 +864,10 @@ class _RolChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color:        FretixColors.accent.withOpacity(0.1),
+        color:        FretixColors.accent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: FretixColors.accent.withOpacity(0.3),
+          color: FretixColors.accent.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -1026,10 +1026,10 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color:        FretixColors.danger.withOpacity(0.1),
+        color:        FretixColors.danger.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: FretixColors.danger.withOpacity(0.4),
+          color: FretixColors.danger.withValues(alpha: 0.4),
         ),
       ),
       child: Row(
@@ -1090,7 +1090,7 @@ class _CategoriaVehiculoSelector extends StatelessWidget {
             duration: const Duration(milliseconds: 160),
             decoration: BoxDecoration(
               color: isSelected
-                  ? FretixColors.accent.withOpacity(0.12)
+                  ? FretixColors.accent.withValues(alpha: 0.12)
                   : const Color(0xFF1A1A1A),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -1140,7 +1140,7 @@ class _BotonConfirmar extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: FretixColors.accent,
           foregroundColor: Colors.black,
-          disabledBackgroundColor: FretixColors.accent.withOpacity(0.45),
+          disabledBackgroundColor: FretixColors.accent.withValues(alpha: 0.45),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),

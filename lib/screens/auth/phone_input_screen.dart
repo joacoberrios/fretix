@@ -404,7 +404,7 @@ class _BotonContinuar extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: FretixColors.accent,
           foregroundColor: Colors.black,
-          disabledBackgroundColor: FretixColors.accent.withOpacity(0.5),
+          disabledBackgroundColor: FretixColors.accent.withValues(alpha: 0.5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),

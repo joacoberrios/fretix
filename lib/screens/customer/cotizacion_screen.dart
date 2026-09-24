@@ -506,10 +506,8 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                       destino:   _destino,
                       polylines: _polylines,
                       markers:   _markers,
-                      onMapCreated: (ctrl) async {
+                      onMapCreated: (ctrl) {
                         _mapController = ctrl;
-                        // Aplica dark style de inmediato — sin transición diurna (Spec C).
-                        await ctrl.setMapStyle(_kMapStyleNocturno);
                         if (_cotizacionActual != null && !_modoContingencia) {
                           _autoZoom();
                         }
@@ -570,6 +568,7 @@ class _MapaZona extends StatelessWidget {
         ),
         zoom: 12,
       ),
+      style:                   _kMapStyleNocturno,
       onMapCreated:            onMapCreated,
       polylines:               polylines,
       markers:                 markers,
@@ -673,7 +672,7 @@ class _PanelControl extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color:      Colors.black.withOpacity(0.35),
+            color:      Colors.black.withValues(alpha: 0.35),
             blurRadius: 20,
             offset:     const Offset(0, -6),
           ),
@@ -869,8 +868,8 @@ class _CarruselCategorias extends StatelessWidget {
               padding:     const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
               decoration:  BoxDecoration(
                 color: isActive
-                    ? FretixColors.accent.withOpacity(0.10)
-                    : FretixColors.surfaceBorder.withOpacity(0.40),
+                    ? FretixColors.accent.withValues(alpha: 0.10)
+                    : FretixColors.surfaceBorder.withValues(alpha: 0.40),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isActive ? FretixColors.accent : Colors.transparent,
