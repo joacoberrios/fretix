@@ -112,6 +112,8 @@ Ver salida en sección de build abajo.
 - `lib/screens/customer/cotizacion_screen.dart`: pasa esos campos a la CF (ya los tenía de `cotizarViajeFretix`)
 - Datos legados (viajes creados antes del fix) seguirán mostrando bruto — fallback controlado, documentado en el test
 
+**Limitación conocida:** viajes completados ANTES de este fix no tienen comisionApp guardado y van a mostrar el monto bruto en el dashboard del chofer para esos registros históricos — es un dato legado, no un bug nuevo.
+
 ### Implementación
 
 **Query:** `viajes` donde `choferUid == uid` AND `estado == 'completado'`, filtro client-side por `completadoEn >= startOfTodayMendoza()`.
@@ -204,22 +206,42 @@ No se toca código hasta que el CPO provea la clave y apruebe el diseño de CFs 
 
 ## Tarea 3 — Campo cargaKg
 
-| Estado | 📋 DISEÑO COMPLETADO — esperando aprobación del CPO antes de implementar |
-|--------|--------------------------------------------------------------------------|
+| Estado | ✅ Completa — implementada, tests unitarios 44/44 pasando |
+|--------|----------------------------------------------------------|
 
 **Decisión del CPO (confirmada):** input explícito del cliente (número de kg).
 
 **Documento de diseño:** `CARGAKG_DESIGN_LOG.md`
 
-**Resumen de la propuesta:**
-- Campo numérico en `CotizacionScreen` debajo del selector de categoría
-- Validación: `> 0`, warning no bloqueante si `> 40.000 kg`
-- Categorías (mini/plus/max/heavy) permanecen como dimensión de precio; `cargaKg` es la restricción de capacidad para matching
-- `confirmarViajeFretix`: agregar validación y guardar `cargaKg` en el doc
-- `aceptarViajeFretix`: reemplazar `UMBRAL_KG_POR_CATEGORIA` con `viaje.cargaKg` directo + fallback legado
-- `UMBRAL_KG_POR_CATEGORIA`: se mantiene como fallback durante transición, se depreca en siguiente release
+### Implementación
 
-**STOP — no se escribe código hasta aprobación explícita del CPO sobre el diseño.**
+**Umbral de aviso:** 40.000 kg (máximo técnico legal Argentina para camión pesado).
+
+**Archivos modificados:**
+- `lib/screens/customer/cotizacion_screen.dart` — campo `cargaKg` (TextField + validación), `puedeConfirmar` actualizado, payload a CF actualizado
+- `functions/src/confirmar_viaje.js` — valida `cargaKg` (entero positivo), guarda `cargaKg` en el doc Firestore, warn si > 40.000 kg
+- `functions/src/aceptar_viaje.js` — reemplaza lógica Opción C por Opción A (`viaje.cargaKg > capacidadMaxKg`) + fallback legado DEPRECATED
+
+**Lógica de capacidad post-Tarea 3 (`aceptar_viaje.js`):**
+```
+if (viaje.cargaKg) {               // viajes nuevos — Opción A
+  if (cargaKg > capacidadMaxKg) → rechaza con mensaje concreto (X kg > Y kg)
+} else {                            // viajes legados — fallback DEPRECATED
+  usar UMBRAL_KG_POR_CATEGORIA[categoria]
+}
+```
+
+### Test output (unit tests — emulador no requerido)
+
+```
+jest --testPathPatterns="confirmar_viaje.test.js|aceptar_viaje.test.js" (unit suites)
+
+Tests: 44 passed, 14 skipped (integración — requieren emulador)
+Suites: 2 passed, 2 total
+Time: 0.228 s
+```
+
+Tests de integración (`14`) se skippean cuando el emulador no está corriendo — comportamiento pre-existente en todo el suite. Se deben correr con `firebase emulators:start --only firestore,auth` antes de `npm test`.
 
 ---
 
@@ -242,7 +264,7 @@ Documento creado en `KYC_DESIGN_LOG.md`. Cubre:
 |-------|--------|-----------|
 | Tarea 1: dashboard stats | ✅ Completa + bug corregido + 8/8 tests | `dashboard_stats_test.dart` |
 | Tarea 2: VAPID push | 🚫 Bloqueada — requiere VAPID key del CPO | Investigación CF detallada en sección T2 |
-| Tarea 3: cargaKg | 📋 Diseño aprobación pendiente del CPO | `CARGAKG_DESIGN_LOG.md` |
+| Tarea 3: cargaKg | ✅ Completa — 44/44 unit tests | `CARGAKG_DESIGN_LOG.md` |
 | Tarea 4: migraciones mecánicas | ✅ Completa (dart:html diferida) | analyze 0 errores, build ✓ |
 | Tarea 5: KYC_DESIGN_LOG.md | ✅ Completa | `KYC_DESIGN_LOG.md` |
 

@@ -5,12 +5,8 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const ROLES_CHOFER = new Set(['chofer_independiente', 'empresa_transporte_maestro']);
 
-// Opción C — mapeo provisional categoría de viaje → kg mínimo requerido.
-// Basado en minKg del CATALOGO_REFERENCIA de validar_tarjeta_verde.js.
-// Sin techo: vehículo grande puede tomar viaje chico (limitación conocida,
-// ver VALIDACION_LOG.md § Limitación conocida — Tarea 7).
-// TODO(CPO/DP-1): reemplazar por campo cargaKg explícito en el viaje
-// cuando el cotizador lo capture (Opción A futura).
+// DEPRECATED: fallback para viajes sin cargaKg (legados). Remover cuando
+// todos los viajes en prod tengan cargaKg. Ver CARGAKG_DESIGN_LOG.md.
 const UMBRAL_KG_POR_CATEGORIA = {
   mini:  500,
   plus:  800,
@@ -115,20 +111,29 @@ exports.aceptarViajeFretix = onCall(
           );
         }
 
-        // Opción C: umbral mínimo por categoría; sin techo documentado.
-        const umbral = UMBRAL_KG_POR_CATEGORIA[viaje.categoria];
-        if (!umbral) {
-          throw new HttpsError(
-            'failed-precondition',
-            `Categoría de viaje desconocida: '${viaje.categoria}'.`
-          );
-        }
-
-        if (capacidadMaxKg < umbral) {
-          throw new HttpsError(
-            'failed-precondition',
-            `Tu vehículo (${capacidadMaxKg} kg) no alcanza para este viaje (mínimo ${umbral} kg).`
-          );
+        // Opción A: cargaKg explícito (viajes nuevos); fallback Opción C para legados.
+        // DEPRECATED: remover rama else cuando todos los viajes en prod tengan cargaKg.
+        if (viaje.cargaKg) {
+          if (viaje.cargaKg > capacidadMaxKg) {
+            throw new HttpsError(
+              'failed-precondition',
+              `Tu vehículo (${capacidadMaxKg} kg máx) no puede transportar esta carga (${viaje.cargaKg} kg).`
+            );
+          }
+        } else {
+          const umbral = UMBRAL_KG_POR_CATEGORIA[viaje.categoria];
+          if (!umbral) {
+            throw new HttpsError(
+              'failed-precondition',
+              `Categoría de viaje desconocida: '${viaje.categoria}'.`
+            );
+          }
+          if (capacidadMaxKg < umbral) {
+            throw new HttpsError(
+              'failed-precondition',
+              `Tu vehículo (${capacidadMaxKg} kg) no alcanza para este viaje (mínimo ${umbral} kg).`
+            );
+          }
         }
 
         // Leer datos del cliente para desnormalizar en el viaje (admin SDK — bypasea rules).

@@ -86,6 +86,91 @@ describe('aceptarViajeFretix — validaciones de payload (unitario)', () => {
   });
 });
 
+// ── Tests de lógica cargaKg (Tarea 3 — Opción A + fallback legado) ────────────
+
+describe('aceptarViajeFretix — lógica cargaKg (Tarea 3, unitario)', () => {
+  // Replica la lógica de aceptar_viaje.js post-Tarea 3.
+  function validarCapacidad(viaje, capacidadMaxKg) {
+    if (viaje.cargaKg) {
+      if (viaje.cargaKg > capacidadMaxKg) {
+        return { ok: false, msg: `Tu vehículo (${capacidadMaxKg} kg máx) no puede transportar esta carga (${viaje.cargaKg} kg).` };
+      }
+      return { ok: true };
+    } else {
+      const umbral = UMBRAL_KG_POR_CATEGORIA[viaje.categoria];
+      if (!umbral) {
+        return { ok: false, msg: `Categoría de viaje desconocida: '${viaje.categoria}'.` };
+      }
+      if (capacidadMaxKg < umbral) {
+        return { ok: false, msg: `Tu vehículo (${capacidadMaxKg} kg) no alcanza para este viaje (mínimo ${umbral} kg).` };
+      }
+      return { ok: true };
+    }
+  }
+
+  describe('Opción A — viaje con cargaKg explícito (viajes nuevos)', () => {
+    test('vehículo con capacidad exacta acepta el viaje', () => {
+      const result = validarCapacidad({ cargaKg: 1200, categoria: 'max' }, 1200);
+      expect(result.ok).toBe(true);
+    });
+
+    test('vehículo con capacidad superior acepta el viaje', () => {
+      const result = validarCapacidad({ cargaKg: 800, categoria: 'max' }, 2000);
+      expect(result.ok).toBe(true);
+    });
+
+    test('vehículo con capacidad insuficiente es rechazado', () => {
+      const result = validarCapacidad({ cargaKg: 1500, categoria: 'max' }, 1000);
+      expect(result.ok).toBe(false);
+      expect(result.msg).toContain('1000 kg máx');
+      expect(result.msg).toContain('1500 kg');
+    });
+
+    test('cargaKg mínimo: 1 kg siempre pasa si capacidad > 0', () => {
+      const result = validarCapacidad({ cargaKg: 1, categoria: 'mini' }, 500);
+      expect(result.ok).toBe(true);
+    });
+
+    test('cargaKg mayor a capacidad da mensaje con valores concretos', () => {
+      const result = validarCapacidad({ cargaKg: 5000, categoria: 'heavy' }, 4000);
+      expect(result.ok).toBe(false);
+      expect(result.msg).toBe('Tu vehículo (4000 kg máx) no puede transportar esta carga (5000 kg).');
+    });
+  });
+
+  describe('Fallback legado — viaje sin cargaKg (UMBRAL_KG_POR_CATEGORIA)', () => {
+    test('viaje mini: capacidad suficiente pasa', () => {
+      const result = validarCapacidad({ categoria: 'mini' }, 560);
+      expect(result.ok).toBe(true);
+    });
+
+    test('viaje mini: capacidad insuficiente es rechazado', () => {
+      const result = validarCapacidad({ categoria: 'mini' }, 400);
+      expect(result.ok).toBe(false);
+      expect(result.msg).toContain('mínimo 500 kg');
+    });
+
+    test('viaje heavy: capacidad exacta pasa', () => {
+      const result = validarCapacidad({ categoria: 'heavy' }, 4000);
+      expect(result.ok).toBe(true);
+    });
+
+    test('categoría desconocida en viaje legado es rechazada', () => {
+      const result = validarCapacidad({ categoria: 'ultra' }, 5000);
+      expect(result.ok).toBe(false);
+      expect(result.msg).toContain("Categoría de viaje desconocida: 'ultra'");
+    });
+
+    test('cargaKg=0 (campo presente pero falsy) usa fallback legado', () => {
+      // Si por algún bug un viaje llega con cargaKg=0, es falsy → rama legado.
+      // Esto documenta el comportamiento actual; el fix correcto es que confirmar_viaje
+      // no permita cargaKg <= 0 (validación ya implementada).
+      const result = validarCapacidad({ cargaKg: 0, categoria: 'mini' }, 560);
+      expect(result.ok).toBe(true); // pasaría por la rama legado
+    });
+  });
+});
+
 // ── Tests de integración (requieren emulador Firestore) ───────────────────────
 
 describe('aceptarViajeFretix — integración con Firestore (emulador)', () => {

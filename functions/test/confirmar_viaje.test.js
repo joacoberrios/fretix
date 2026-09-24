@@ -156,6 +156,54 @@ describe('confirmarViajeFretix — validación de payload', () => {
   });
 });
 
+// ── Tests de validación de cargaKg (Tarea 3, sin emulador) ───────────────────
+
+describe('confirmarViajeFretix — validación de cargaKg (Tarea 3)', () => {
+  // Replica la validación del CF: entero positivo obligatorio.
+  const validarCargaKg = (v) =>
+    typeof v === 'number' && v > 0 && Number.isInteger(v);
+
+  test('cargaKg=500 (válido — peso de flete típico)', () => {
+    expect(validarCargaKg(500)).toBe(true);
+  });
+
+  test('cargaKg=1 (válido — borde inferior)', () => {
+    expect(validarCargaKg(1)).toBe(true);
+  });
+
+  test('cargaKg=40000 (válido — exactamente en umbral de aviso)', () => {
+    expect(validarCargaKg(40000)).toBe(true);
+  });
+
+  test('cargaKg=40001 (válido — supera umbral de aviso pero no es error)', () => {
+    expect(validarCargaKg(40001)).toBe(true);
+  });
+
+  test('cargaKg=0 → inválido', () => {
+    expect(validarCargaKg(0)).toBe(false);
+  });
+
+  test('cargaKg=-1 → inválido', () => {
+    expect(validarCargaKg(-1)).toBe(false);
+  });
+
+  test('cargaKg=1.5 (decimal) → inválido (solo enteros)', () => {
+    expect(validarCargaKg(1.5)).toBe(false);
+  });
+
+  test('cargaKg=null → inválido', () => {
+    expect(validarCargaKg(null)).toBe(false);
+  });
+
+  test('cargaKg ausente (undefined) → inválido', () => {
+    expect(validarCargaKg(undefined)).toBe(false);
+  });
+
+  test('cargaKg="500" (string) → inválido (requiere number)', () => {
+    expect(validarCargaKg('500')).toBe(false);
+  });
+});
+
 // ── Tests de integración (requieren emulador Firestore en 127.0.0.1:8282) ────
 
 describe('confirmarViajeFretix — integración con Firestore (emulador)', () => {

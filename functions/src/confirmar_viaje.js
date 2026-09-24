@@ -24,6 +24,12 @@ exports.confirmarViajeFretix = onCall(
   if (!d.categoria || !CATEGORIAS_VALIDAS.has(d.categoria)) {
     throw new HttpsError('invalid-argument', 'Categoría inválida.');
   }
+  if (typeof d.cargaKg !== 'number' || d.cargaKg <= 0 || !Number.isInteger(d.cargaKg)) {
+    throw new HttpsError('invalid-argument', 'cargaKg requerido: entero positivo en kg.');
+  }
+  if (d.cargaKg > 40000) {
+    console.warn(`[confirmar] cargaKg alto: ${d.cargaKg} kg — verificar antes de continuar.`);
+  }
   if (!d.origen?.lat || !d.origen?.lng || !d.destino?.lat || !d.destino?.lng) {
     throw new HttpsError('invalid-argument', 'Origen o destino incompleto.');
   }
@@ -73,6 +79,7 @@ exports.confirmarViajeFretix = onCall(
     estado:        'pending',
     pricingMethod: d.pricingMethod ?? 'haversine_contingencia',
     categoria:     d.categoria,
+    cargaKg:       d.cargaKg,
     ayudante:      d.ayudante === true,
     origen: {
       lat:     d.origen.lat,

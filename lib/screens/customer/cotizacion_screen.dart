@@ -103,6 +103,17 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
 
   bool _isConfirming = false;
 
+  // ── [ESTADO] cargaKg — capturado explícitamente por el cliente (Tarea 3).
+  final TextEditingController _cargaKgController = TextEditingController();
+  int? _cargaKg;
+
+  bool get _cargaKgValida => _cargaKg != null && _cargaKg! > 0;
+  bool get _cargaKgAlta   => _cargaKg != null && _cargaKg! > 40000;
+
+  void _onCargaKgChanged(String v) {
+    setState(() => _cargaKg = int.tryParse(v.trim()));
+  }
+
   // Contexto de crédito B2B — null = no resuelto/error → default-secure: bloquea.
   String?               _clientType;  // 'particular' | 'empresa' | null
   String?               _companyId;
@@ -119,6 +130,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
 
   @override
   void dispose() {
+    _cargaKgController.dispose();
     _mapController?.dispose();
     super.dispose();
   }
@@ -384,6 +396,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
           'lng':     _destino.longitude,
           'address': widget.args?.destinoLabel ?? '',
         },
+        'cargaKg': _cargaKg!,
         'cotizacion': {
           'total':       _cotizacionActual!['total'],
           'subtotal':    _cotizacionActual!['subtotal'],
@@ -531,7 +544,10 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                 formatPeso:        _formatPeso,
                 onCategoryChanged: _onCategoryChanged,
                 onHelperChanged:   _onHelperChanged,
-                puedeConfirmar:    _cotizacionActual != null && !_isLoading && _creditPermitido(),
+                cargaKgController: _cargaKgController,
+                onCargaKgChanged:  _onCargaKgChanged,
+                cargaKgAlta:       _cargaKgAlta,
+                puedeConfirmar:    _cotizacionActual != null && !_isLoading && _creditPermitido() && _cargaKgValida,
                 onConfirmar:       _confirmarViaje,
               ),
             ),
@@ -651,6 +667,9 @@ class _PanelControl extends StatelessWidget {
     required this.formatPeso,
     required this.onCategoryChanged,
     required this.onHelperChanged,
+    required this.cargaKgController,
+    required this.onCargaKgChanged,
+    required this.cargaKgAlta,
     required this.puedeConfirmar,
     required this.onConfirmar,
   });
@@ -664,6 +683,9 @@ class _PanelControl extends StatelessWidget {
   final String Function(double)  formatPeso;
   final void Function(String)    onCategoryChanged;
   final void Function(bool)      onHelperChanged;
+  final TextEditingController    cargaKgController;
+  final void Function(String)    onCargaKgChanged;
+  final bool     cargaKgAlta;
   final bool     puedeConfirmar;
   final Future<void> Function()  onConfirmar;
 
@@ -731,7 +753,54 @@ class _PanelControl extends StatelessWidget {
                     value:     hasHelper,
                     onChanged: onHelperChanged,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
+
+                  // ── Campo peso de carga (Tarea 3 — cargaKg explícito)
+                  const Text(
+                    'Peso de la carga (kg)',
+                    style: TextStyle(
+                      color:      FretixColors.textSecondary,
+                      fontSize:   13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller:  cargaKgController,
+                    onChanged:   onCargaKgChanged,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(
+                      color:    FretixColors.textSecondary,
+                      fontSize: 15,
+                    ),
+                    decoration: InputDecoration(
+                      hintText:  'ej. 500',
+                      hintStyle: const TextStyle(color: FretixColors.textMuted),
+                      suffixText:  'kg',
+                      suffixStyle: const TextStyle(color: FretixColors.textMuted),
+                      filled:    true,
+                      fillColor: FretixColors.surfaceBorder.withValues(alpha: 0.4),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:   BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical:   12,
+                      ),
+                    ),
+                  ),
+                  if (cargaKgAlta) ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      '¿Estás seguro? Eso supera los 40.000 kg. Confirmá el peso antes de continuar.',
+                      style: TextStyle(
+                        color:    Color(0xFFE6A817),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
 
                   // ── Botón confirmar (Módulo 4)
                   SizedBox(
