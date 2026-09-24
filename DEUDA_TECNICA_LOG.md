@@ -98,12 +98,83 @@ Ver salida en sección de build abajo.
 
 ---
 
-## Tareas en esta sesión (resumen)
+## Tarea 1 — Dashboard stats chofer con datos reales
 
-| Tarea | Estado |
-|-------|--------|
-| Tarea 1: dashboard stats chofer | 🔄 En progreso |
-| Tarea 2: VAPID key push | 🚫 BLOQUEADA — requiere CPO |
-| Tarea 3: cargaKg field | 🚫 BLOQUEADA — decisión de producto pendiente CPO |
-| Tarea 4: migraciones mecánicas | ✅ Completa (dart:html diferida) |
-| Tarea 5: KYC_DESIGN_LOG.md | 📋 Pendiente |
+| Estado | ✅ Completa |
+|--------|------------|
+
+**Cambio:** `_StatsRow` en `HomeChoferScreen` reemplaza valores hardcodeados por datos reales de Firestore.
+
+**Query:** `viajes` donde `choferUid == uid` AND `estado == 'completado'`, filtro client-side por `completadoEn >= startOfTodayMendoza()`.
+
+**Cálculo de ganancia:** `cotizacion.total - cotizacion.comisionApp` (= subtotal + helperFee).
+
+**Índice usado:** `(choferUid, estado)` — ya existente en `firestore.indexes.json`. No se requiere índice nuevo; el filtro de fecha es client-side sobre el resultado de la query.
+
+> Optimización futura: agregar índice `(choferUid, estado, completadoEn)` para hacer el filtro server-side cuando el volumen de viajes completados sea alto.
+
+**Calificación:** muestra `—` permanente — no existe modelo de ratings en Firestore. Decisión pendiente del CPO para Fase 2.
+
+**flutter analyze:** 0 errores nuevos.
+
+---
+
+## Tarea 2 — VAPID key + push notifications
+
+| Estado | 🚫 BLOQUEADA — requiere acción del CPO |
+|--------|----------------------------------------|
+
+**Placeholder en producción:**
+```
+lib/services/auth_service.dart:278
+vapidKey: 'BFretixVapidKeyPlaceholder', // reemplazar con VAPID real
+```
+
+**Causa del bloqueo:**
+1. No existe ninguna Cloud Function que envíe push notifications (FCM)
+2. El VAPID key real debe generarlo el CPO en: Firebase Console → Project Settings → Cloud Messaging → Web Push Certificates → "Generate key pair"
+3. Una vez generada la clave, se actualiza `auth_service.dart:278` y se implementa la CF correspondiente
+
+**No se toca código hasta que el CPO provea la clave real y apruebe la CF.**
+
+---
+
+## Tarea 3 — Campo cargaKg
+
+| Estado | 🚫 BLOQUEADA — decisión de producto pendiente del CPO |
+|--------|-------------------------------------------------------|
+
+**Pregunta sin respuesta:**
+¿El campo `cargaKg` debe ser un input explícito del cliente al crear el viaje, o debe inferirse de la `categoriaVehiculo` del vehículo asignado?
+
+**Impacto de la decisión:**
+- Si es input del cliente: cambios en `cotizacion_screen.dart` (UI + lógica de cotización)
+- Si se infiere: cambios en la CF `cotizacion.js` y el modelo de datos del viaje
+- Ambas opciones afectan `firestore.rules` y el esquema de `/viajes`
+
+**No se modifica código ni esquema hasta que el CPO defina el comportamiento.**
+
+---
+
+## Tarea 5 — KYC_DESIGN_LOG.md
+
+| Estado | ✅ Completa (documento creado, sin código) |
+|--------|-------------------------------------------|
+
+Documento creado en `KYC_DESIGN_LOG.md`. Cubre:
+- Contexto y motivación del KYC de choferes (Fase 1)
+- Propuesta de flujo y estados (`kycPendiente → kycAprobado`)
+- Decisiones pendientes del CPO (CPO-KYC-01 a CPO-KYC-05)
+- Dependencias con Tarea 2 (push) y OCR
+
+---
+
+## Resumen final de la sesión 2026-09-24
+
+| Tarea | Estado | Branch/Commit |
+|-------|--------|---------------|
+| Tarea 1: dashboard stats | ✅ Completa | `feature-deuda-menor-20260924` |
+| Tarea 2: VAPID push | 🚫 Bloqueada — requiere CPO | — |
+| Tarea 3: cargaKg | 🚫 Bloqueada — decisión producto CPO | — |
+| Tarea 4: migraciones mecánicas | ✅ Completa (dart:html diferida) | `feature-deuda-menor-20260924` |
+| Tarea 5: KYC_DESIGN_LOG.md | ✅ Completa | `feature-deuda-menor-20260924` |
