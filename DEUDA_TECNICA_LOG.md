@@ -100,59 +100,126 @@ Ver salida en sección de build abajo.
 
 ## Tarea 1 — Dashboard stats chofer con datos reales
 
-| Estado | ✅ Completa |
-|--------|------------|
+| Estado | ✅ Completa — incluyendo fix de bug y tests |
+|--------|---------------------------------------------|
 
-**Cambio:** `_StatsRow` en `HomeChoferScreen` reemplaza valores hardcodeados por datos reales de Firestore.
+### Bug encontrado y corregido en sesión de auditoría (2026-09-24)
+
+**Bug:** `confirmarViajeFretix` solo guardaba `{total, distanciaKm, duracionMin}` en `cotizacion`. El campo `comisionApp` nunca se escribía en el doc. `_fetchStats()` leía `comisionApp → null → fallback 0 → ganado = total bruto` (lo que pagó el cliente, no lo que ganó el chofer).
+
+**Fix aplicado:**
+- `functions/src/confirmar_viaje.js`: guarda `subtotal`, `comisionApp`, `helperFee` además de `total`
+- `lib/screens/customer/cotizacion_screen.dart`: pasa esos campos a la CF (ya los tenía de `cotizarViajeFretix`)
+- Datos legados (viajes creados antes del fix) seguirán mostrando bruto — fallback controlado, documentado en el test
+
+### Implementación
 
 **Query:** `viajes` donde `choferUid == uid` AND `estado == 'completado'`, filtro client-side por `completadoEn >= startOfTodayMendoza()`.
 
-**Cálculo de ganancia:** `cotizacion.total - cotizacion.comisionApp` (= subtotal + helperFee).
+**Cálculo de ganancia:** `cotizacion.total - cotizacion.comisionApp`
+- = `subtotal + helperFee` (neto para el chofer, sin comisión de plataforma)
+- En la CF real: `subtotal × 1.15 = total` (sin helper), por lo que `total - comisionApp = subtotal`
+- Con ayudante: `total = subtotal + comisionApp + helperFee` → `ganado = subtotal + helperFee`
 
-**Índice usado:** `(choferUid, estado)` — ya existente en `firestore.indexes.json`. No se requiere índice nuevo; el filtro de fecha es client-side sobre el resultado de la query.
+**Zona horaria Mendoza:** `startOfTodayMendoza()` usa `DateTime.now().toUtc()` del dispositivo menos 3 horas (UTC-3 fijo, sin DST). El `completadoEn` es un `FieldValue.serverTimestamp()` confiable. El único riesgo es el reloj del dispositivo, que en la práctica está NTP-sincronizado. Se documenta como limitación conocida — no se puede hacer sin algún reloj del servidor.
 
-> Optimización futura: agregar índice `(choferUid, estado, completadoEn)` para hacer el filtro server-side cuando el volumen de viajes completados sea alto.
+**Índice usado:** `(choferUid, estado)` — ya existente. Filtro de fecha es client-side.
 
-**Calificación:** muestra `—` permanente — no existe modelo de ratings en Firestore. Decisión pendiente del CPO para Fase 2.
+> Optimización futura: índice `(choferUid, estado, completadoEn)` cuando el volumen histórico sea alto.
 
-**flutter analyze:** 0 errores nuevos.
+**Calificación:** muestra `—` permanente — no hay modelo de ratings en Firestore (Fase 2).
+
+**Archivos:**
+- `lib/screens/home/dashboard_stats_logic.dart` ← lógica pura extraída (testeable sin Firebase)
+- `lib/screens/home/home_chofer_screen.dart` ← usa el archivo extraído
+- `functions/src/confirmar_viaje.js` ← fix comisionApp
+- `lib/screens/customer/cotizacion_screen.dart` ← pasa campos completos a la CF
+- `test/dashboard_stats_test.dart` ← tests
+
+### Test output real
+
+```
+flutter test test/dashboard_stats_test.dart
+
+00:00 +1: 3 viajes de $10.000 con comisionApp=$1.500 → $25.500 neto (no $30.000 bruto)
+00:00 +2: viajes SIN comisionApp en doc → fallback 0, muestra bruto (escenario legado)
+00:00 +3: viajes de ayer NO se cuentan
+00:00 +4: viaje con completadoEn null se ignora sin lanzar excepción
+00:00 +5: viaje con cotizacion null cuenta el viaje pero suma $0
+00:00 +6: fórmula CF real: subtotal=$10.000, total=$11.500, comision=$1.500 → neto=$10.000
+00:00 +7: ayudante incluido: helperFee va al chofer, no se descuenta
+00:00 +8: All tests passed!
+```
 
 ---
 
 ## Tarea 2 — VAPID key + push notifications
 
-| Estado | 🚫 BLOQUEADA — requiere acción del CPO |
-|--------|----------------------------------------|
+| Estado | 🚫 BLOQUEADA — requiere acción del CPO (VAPID key) |
+|--------|----------------------------------------------------|
 
-**Placeholder en producción:**
+### VAPID placeholder
+
 ```
 lib/services/auth_service.dart:278
 vapidKey: 'BFretixVapidKeyPlaceholder', // reemplazar con VAPID real
 ```
 
-**Causa del bloqueo:**
-1. No existe ninguna Cloud Function que envíe push notifications (FCM)
-2. El VAPID key real debe generarlo el CPO en: Firebase Console → Project Settings → Cloud Messaging → Web Push Certificates → "Generate key pair"
-3. Una vez generada la clave, se actualiza `auth_service.dart:278` y se implementa la CF correspondiente
+El CPO debe generar la clave en: Firebase Console → Project Settings → Cloud Messaging → Web Push Certificates → "Generate key pair".
 
-**No se toca código hasta que el CPO provea la clave real y apruebe la CF.**
+### Estado real de las CFs de push (investigado 2026-09-24)
+
+| Evento | CF que debería disparar push | Estado |
+|--------|------------------------------|--------|
+| Chofer acepta viaje → notificar cliente | — | ❌ NO EXISTE ningún código |
+| Tarjeta Verde → pendiente_revision → notificar admin | `validarTarjetaVerdeFretix` | ⚠️ PARCIAL |
+| Viaje finalizado → notificar cliente | — | ❌ NO EXISTE |
+| KYC aprobado/rechazado → notificar chofer | — | ❌ NO EXISTE (Fase 2) |
+
+**Detalle del caso "parcial" (tarjeta verde → admin):**
+
+`validar_tarjeta_verde.js` — `notificarOperador()` (líneas 81-105):
+- ✅ Busca admins con `fcmToken` registrado
+- ✅ Escribe en `/notificaciones_operador` collection con `procesado: false`
+- ❌ **NO llama a `getMessaging().send()` en ningún lugar**
+- La arquitectura planeada era tener una CF de Firestore trigger que procese esa colección — **esa CF no existe**
+
+**CF de storage de FCM tokens:**
+
+`actualizarFcmTokenFretix` ✅ EXISTE y funciona — guarda `fcmToken` en `/users/{uid}` cuando el cliente lo llama desde Flutter.
+
+### Qué falta cuando llegue el VAPID real
+
+1. **Para "tarjeta verde → admin":**
+   - Agregar CF Firestore trigger: `onDocumentCreated('/notificaciones_operador/{id}')` → `getMessaging().sendEachForMulticast({ tokens, notification })` → marcar `procesado: true`
+   - O: cambiar `notificarOperador()` para llamar FCM directamente (sin Firestore como intermediario)
+
+2. **Para "chofer acepta viaje → cliente":** nueva CF desde cero en `aceptar_viaje.js`
+
+3. **Actualizar `auth_service.dart:278`** con el VAPID real
+
+No se toca código hasta que el CPO provea la clave y apruebe el diseño de CFs de push.
 
 ---
 
 ## Tarea 3 — Campo cargaKg
 
-| Estado | 🚫 BLOQUEADA — decisión de producto pendiente del CPO |
-|--------|-------------------------------------------------------|
+| Estado | 📋 DISEÑO COMPLETADO — esperando aprobación del CPO antes de implementar |
+|--------|--------------------------------------------------------------------------|
 
-**Pregunta sin respuesta:**
-¿El campo `cargaKg` debe ser un input explícito del cliente al crear el viaje, o debe inferirse de la `categoriaVehiculo` del vehículo asignado?
+**Decisión del CPO (confirmada):** input explícito del cliente (número de kg).
 
-**Impacto de la decisión:**
-- Si es input del cliente: cambios en `cotizacion_screen.dart` (UI + lógica de cotización)
-- Si se infiere: cambios en la CF `cotizacion.js` y el modelo de datos del viaje
-- Ambas opciones afectan `firestore.rules` y el esquema de `/viajes`
+**Documento de diseño:** `CARGAKG_DESIGN_LOG.md`
 
-**No se modifica código ni esquema hasta que el CPO defina el comportamiento.**
+**Resumen de la propuesta:**
+- Campo numérico en `CotizacionScreen` debajo del selector de categoría
+- Validación: `> 0`, warning no bloqueante si `> 40.000 kg`
+- Categorías (mini/plus/max/heavy) permanecen como dimensión de precio; `cargaKg` es la restricción de capacidad para matching
+- `confirmarViajeFretix`: agregar validación y guardar `cargaKg` en el doc
+- `aceptarViajeFretix`: reemplazar `UMBRAL_KG_POR_CATEGORIA` con `viaje.cargaKg` directo + fallback legado
+- `UMBRAL_KG_POR_CATEGORIA`: se mantiene como fallback durante transición, se depreca en siguiente release
+
+**STOP — no se escribe código hasta aprobación explícita del CPO sobre el diseño.**
 
 ---
 
@@ -169,12 +236,22 @@ Documento creado en `KYC_DESIGN_LOG.md`. Cubre:
 
 ---
 
-## Resumen final de la sesión 2026-09-24
+## Resumen consolidado (sesiones 2026-09-24)
 
-| Tarea | Estado | Branch/Commit |
-|-------|--------|---------------|
-| Tarea 1: dashboard stats | ✅ Completa | `feature-deuda-menor-20260924` |
-| Tarea 2: VAPID push | 🚫 Bloqueada — requiere CPO | — |
-| Tarea 3: cargaKg | 🚫 Bloqueada — decisión producto CPO | — |
-| Tarea 4: migraciones mecánicas | ✅ Completa (dart:html diferida) | `feature-deuda-menor-20260924` |
-| Tarea 5: KYC_DESIGN_LOG.md | ✅ Completa | `feature-deuda-menor-20260924` |
+| Tarea | Estado | Evidencia |
+|-------|--------|-----------|
+| Tarea 1: dashboard stats | ✅ Completa + bug corregido + 8/8 tests | `dashboard_stats_test.dart` |
+| Tarea 2: VAPID push | 🚫 Bloqueada — requiere VAPID key del CPO | Investigación CF detallada en sección T2 |
+| Tarea 3: cargaKg | 📋 Diseño aprobación pendiente del CPO | `CARGAKG_DESIGN_LOG.md` |
+| Tarea 4: migraciones mecánicas | ✅ Completa (dart:html diferida) | analyze 0 errores, build ✓ |
+| Tarea 5: KYC_DESIGN_LOG.md | ✅ Completa | `KYC_DESIGN_LOG.md` |
+
+**Commits en `feature-deuda-menor-20260924`:**
+```
+092badd fix(dashboard): comisionApp faltaba en viaje doc — mostraba bruto en vez de neto
+eb97755 docs: DEUDA_TECNICA_LOG + KYC_DESIGN_LOG — cierre sesión 2026-09-24
+8efc588 feat(dashboard): stats del día en HomeChoferScreen con datos reales
+732c4be refactor(deuda-menor): withOpacity→.withValues(alpha:) + setMapStyle→GoogleMap.style
+```
+
+**BARANDA:** Ninguna de estas ramas se mergea a main sin revisión explícita del CPO, una por una.
