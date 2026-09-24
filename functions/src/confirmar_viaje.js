@@ -86,6 +86,9 @@ exports.confirmarViajeFretix = onCall(
     },
     cotizacion: {
       total:       d.cotizacion.total,
+      subtotal:    typeof d.cotizacion.subtotal    === 'number' ? d.cotizacion.subtotal    : null,
+      comisionApp: typeof d.cotizacion.comisionApp === 'number' ? d.cotizacion.comisionApp : null,
+      helperFee:   typeof d.cotizacion.helperFee   === 'number' ? d.cotizacion.helperFee   : 0,
       distanciaKm: d.cotizacion.distanciaKm ?? 0,
       duracionMin: d.cotizacion.duracionMin ?? 0,
     },

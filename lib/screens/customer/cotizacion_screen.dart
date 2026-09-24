@@ -386,6 +386,9 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
         },
         'cotizacion': {
           'total':       _cotizacionActual!['total'],
+          'subtotal':    _cotizacionActual!['subtotal'],
+          'comisionApp': _cotizacionActual!['comisionApp'],
+          'helperFee':   _cotizacionActual!['helperFee'] ?? 0,
           'distanciaKm': _cotizacionActual!['distanciaKm'],
           'duracionMin': _cotizacionActual!['duracionMin'],
         },

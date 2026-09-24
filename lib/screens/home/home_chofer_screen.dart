@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../router/app_router.dart';
 import '../../services/auth_service.dart';
 import '../../theme/fretix_colors.dart';
+import 'dashboard_stats_logic.dart';
 
 class HomeChoferScreen extends StatefulWidget {
   const HomeChoferScreen({super.key});
@@ -298,56 +299,24 @@ class _DisponibilidadCard extends StatelessWidget {
 
 // ── Stats row ─────────────────────────────────────────────────────────────────
 
-class _DashStats {
-  const _DashStats({required this.viajesHoy, required this.ganadoHoy});
-  final int    viajesHoy;
-  final double ganadoHoy;
-}
-
 class _StatsRow extends StatelessWidget {
   const _StatsRow({required this.uid});
   final String uid;
 
-  // Mendoza: UTC-3, sin DST. Devuelve inicio del día Mendoza en UTC.
-  static DateTime _startOfTodayMendoza() {
-    final nowUtc      = DateTime.now().toUtc();
-    final nowMendoza  = nowUtc.subtract(const Duration(hours: 3));
-    final dayMendoza  = DateTime.utc(nowMendoza.year, nowMendoza.month, nowMendoza.day);
-    return dayMendoza.add(const Duration(hours: 3));
-  }
-
-  Future<_DashStats> _fetchStats() async {
+  Future<DashStats> _fetchStats() async {
     final snap = await FirebaseFirestore.instance
         .collection('viajes')
         .where('choferUid', isEqualTo: uid)
         .where('estado',    isEqualTo: 'completado')
         .get();
 
-    final start = _startOfTodayMendoza();
-    double ganado = 0;
-    int    count  = 0;
-
-    for (final doc in snap.docs) {
-      final data       = doc.data();
-      final ts         = data['completadoEn'];
-      if (ts == null) continue;
-      final completado = (ts as Timestamp).toDate().toUtc();
-      if (completado.isBefore(start)) continue;
-
-      count++;
-      final cot       = data['cotizacion'] as Map<String, dynamic>?;
-      if (cot != null) {
-        final total    = (cot['total']      as num?)?.toDouble() ?? 0;
-        final comision = (cot['comisionApp'] as num?)?.toDouble() ?? 0;
-        ganado        += total - comision;
-      }
-    }
-    return _DashStats(viajesHoy: count, ganadoHoy: ganado);
+    final docs = snap.docs.map((d) => d.data()).toList();
+    return calcularStatsDesdeDocumentos(docs, startOfTodayMendoza());
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_DashStats>(
+    return FutureBuilder<DashStats>(
       future: _fetchStats(),
       builder: (context, snap) {
         final stats     = snap.data;
