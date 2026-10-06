@@ -1,10 +1,10 @@
 # FRETIX — Contexto de proyecto para IA
 
-> Última actualización: 2026-08-06
+> Última actualización: 2026-10-06
 
 ## Qué es FRETIX
 
-Plataforma de fletes B2C/B2B en Flutter Web + Firebase. Conecta clientes que necesitan transporte de carga con choferes/transportistas. Tiene validación de crédito B2B para empresas.
+Plataforma de fletes B2C/B2B en Flutter Web + Firebase. Conecta clientes que necesitan transporte de carga con choferes/transportistas. Tiene validación de crédito B2B para empresas, matching por capacidad física de carga y validación documental de vehículos.
 
 Stack: Flutter 3.44.4 / Dart 3.12.2, Firebase (Auth, Firestore, Cloud Functions v2, Hosting), Google Maps Directions API.
 
@@ -14,23 +14,26 @@ Proyecto Firebase: `fretix-dev-jb`. Producción en https://fretix-dev-jb.web.app
 
 ## Estado actual de la rama
 
-Rama activa: `main` (local).
+- **Rama activa:** `feature-deuda-menor-20260924` (trackeada a `origin/feature-deuda-menor-20260924`).
+- **Historial:** 100 commits en total. Se desprende de `main` (94 commits) con 6 commits propios de deuda menor y optimizaciones.
+- **Estado de ramas previas:**
+  - `feature-validacion-vehiculo-20260904` **SÍ está mergeada** en `main`.
+  - También están mergeadas en `main`: `feature-matcheo-20260806`, `feature-tarea11-subir-tarjeta-verde`, `feature-tracking-gps-20260905`, `feature-viaje-en-curso-20260905`, `feature-estado-en-transito-20260906`, `feature-rebrand-azul-acero-20260906`, `feature-mapstyle-premium-20260906`.
+- **Regla de oro:** No hacer merge a `main` ni force-push sin revisión explícita del CPO.
 
-La rama `main` local tiene 64 commits y diverge de `origin/main` (23 commits). No hacer merge ni force-push sin revisión explícita.
-
-### Commits recientes
+### Commits recientes en HEAD
 
 ```
-93e470c docs: agregar contexto de proyecto para sesiones futuras de IA
-13ed39a feat(chofer): conectar toggle de disponibilidad a Firestore (disponibleParaViajes)
-9f9ff17 fix(onboarding): agregar companyId a userDoc en rama empresa
-9101939 fix(security): proteger companyId y restringir /config a admin (Fix 1 y Fix 2)
-e0eeadf fix(router): corregir strings de rol en _ChoferGuard
-eea3f96 fix(router): agregar guard de rol en ruta /home/chofer
-12c7ba8 fix(admin): agregar guard de rol en ruta /admin/tarifas
-6ccb24b docs: agregar README.md, limpiar comentarios stale de Codespaces y cerrar OVERNIGHT_LOG
-e22adc8 chore(deps): upgrade google_maps_flutter 2.17→2.18
-9ac8b04 fix(a11y): ampliar touch targets a 44dp en toggle ayudante y botón Reenviar SMS
+69b2079 feat(cargaKg): Tarea 3 — campo explícito de peso de carga en CotizacionScreen
+8f81134 docs: actualiza logs con auditoría T1 + diseño T3 + estado push T2
+092badd fix(dashboard): comisionApp faltaba en viaje doc — mostraba bruto en vez de neto
+eb97755 docs: DEUDA_TECNICA_LOG + KYC_DESIGN_LOG — cierre sesión 2026-09-24
+8efc588 feat(dashboard): stats del día en HomeChoferScreen con datos reales
+732c4be refactor(deuda-menor): withOpacity→.withValues(alpha:) + setMapStyle→GoogleMap.style
+ed95e1a feat(mapstyle): estilo de mapa premium — jerarquía visual fondo/ruta
+b8dd317 refactor(rebrand): elimina accentDark — token muerto sin consumidores
+dc82d22 feat(rebrand): paleta Cobre → Azul Acero + Plateado
+21e1484 feat(viaje): nuevo estado en_transito — ciclo de vida completo
 ```
 
 ---
@@ -70,11 +73,11 @@ Flutter no está en el PATH global. Ruta completa: `/Users/joaquinberrios/Docume
 
 ## Roles de usuario — CRÍTICO: dos sistemas de nombres
 
-Hay dos sistemas de nombres para los roles que coexisten en el código. Confundirlos causó el bug del guard (commit e0eeadf).
+Hay dos sistemas de nombres para los roles que coexisten en el código. Confundirlos rompe la navegación y los guards de ruta.
 
 ### Strings reales que escribe `onboarding.js` en Firestore
 
-Estos son los valores en el campo `onboardingRole` de `/users/{uid}`. Son snake_case y son la fuente de verdad:
+Estos son los valores en el campo `onboardingRole` de `/users/{uid}`. Son snake_case y son la fuente de verdad del backend:
 
 | Rol | String en Firestore (`onboardingRole`) |
 |---|---|
@@ -87,7 +90,7 @@ Definidos en `functions/src/onboarding.js:28-34` (`ROLE_TO_USER_ROLES`). **Siemp
 
 ### Enum Dart (`FretixUserRole`)
 
-El enum Dart usa camelCase para los identificadores. El campo `firestoreId` del enum NO coincide con los strings de `onboarding.js` — son dos sistemas distintos:
+El enum Dart usa camelCase para los identificadores. El campo `firestoreId` del enum NO coincide con los strings de `onboarding.js`:
 
 ```dart
 enum FretixUserRole {
@@ -98,7 +101,7 @@ enum FretixUserRole {
 }
 ```
 
-El enum `firestoreId` se usa en `otp_screen.dart` para navegación post-login. El campo `onboardingRole` en Firestore contiene los strings snake_case de `onboarding.js`. Son cosas distintas.
+El enum `firestoreId` se usa para tipado interno y lógica UI. La fuente de verdad en Firestore sigue siendo `onboardingRole` (snake_case).
 
 ### Roles transportista (para guards de ruta)
 
@@ -117,10 +120,12 @@ lib/
   firebase_options.dart              # FlutterFire-generated, apiKey real de producción
   models/
     user_role.dart                   # FretixUserRole enum (4 roles, camelCase)
+    cotizacion_args.dart             # CotizacionArgs para pase de argumentos tipados
   services/
-    auth_service.dart                # Singleton: OTP, onboarding, emulator switch
+    auth_service.dart                # Singleton: OTP, onboarding, FCM token, emulator switch
   router/
-    app_router.dart                  # Rutas nombradas + guards de rol
+    app_router.dart                  # Rutas nombradas + guards de rol (_AdminGuard, _ChoferGuard)
+    role_routing.dart                # Lógica pura de redirección por rol
   screens/
     auth/
       phone_input_screen.dart        # Ingreso de teléfono, OtpArgs
@@ -128,30 +133,51 @@ lib/
     onboarding/
       role_selection_screen.dart     # Carrusel de 4 roles + formulario empresa
     customer/
-      cotizacion_screen.dart         # Mapa, categorías, toggle ayudante, confirmación
+      cotizacion_screen.dart         # Mapa, categorías, cargaKg, ayudante, cotización, crédito B2B
+      buscando_chofer_screen.dart    # StreamBuilder en /viajes/{id} (espera pending / chofer asignado)
       search_location_screen.dart    # Autocomplete de ubicaciones (usa dart:html — stopgap)
     home/
       home_cliente_screen.dart       # Placeholder
-      home_chofer_screen.dart        # Toggle disponibilidad conectado a Firestore
+      home_chofer_screen.dart        # Toggle disponibilidad, stats del día reales, viajes pending
+      dashboard_stats_logic.dart     # Funciones puras de cálculo de métricas chofer
+    chofer/
+      viaje_activo_screen.dart       # GPS tracking en vivo (15s), polilínea, ETA dinámico, transiciones
+      subir_tarjeta_verde_screen.dart# Carga/subsanación de Tarjeta Verde
+      vehiculo_payload.dart          # Construcción pura de payloads para /vehiculos
     admin/
       admin_tarifas_screen.dart      # Solo lectura: StreamBuilder de /config/tarifas
+      admin_validaciones_screen.dart # Gestión/revisión manual de Tarjetas Verdes (/vehiculos)
   theme/
-    fretix_colors.dart               # Tokens de color
+    fretix_colors.dart               # Tokens de color (paleta Azul Acero + Plateado)
+    fretix_theme.dart                # Tema Material 3 corporativo
 
 functions/src/
-  cotizacion.js                      # cotizarViajeFretix — Haversine + Google Maps
-  confirmar_viaje.js                 # confirmarViajeFretix — crea /viajes, valida crédito B2B
-  onboarding.js                      # completarOnboardingFretix — crea /users + /companies
+  cotizacion.js                      # cotizarViajeFretix — Haversine + Google Maps Directions
+  confirmar_viaje.js                 # confirmarViajeFretix — crea /viajes/{id} con estado 'pending', valida crédito B2B y cargaKg
+  aceptar_viaje.js                   # aceptarViajeFretix — transacción atómica, valida vehículo y capacidadMaxKg vs cargaKg
+  iniciar_viaje.js                   # iniciarViajeFretix — pasa de 'aceptado' a 'en_curso'
+  confirmar_carga.js                 # confirmarCargaFretix — pasa de 'en_curso' a 'en_transito'
+  finalizar_viaje.js                 # finalizarViajeFretix — pasa de 'en_transito' a 'completado'
+  cancelar_viaje.js                  # cancelarViajeFretix — cancela desde 'pending' o 'aceptado'
+  validar_tarjeta_verde.js           # validarTarjetaVerdeFretix — OCR (Cloud Vision / Mock), PBT, Tara, capacidadMaxKg
+  actualizar_fcm_token.js            # actualizarFcmTokenFretix — registra token FCM en /users/{uid}
+  onboarding.js                      # completarOnboardingFretix — crea /users/{uid} + /companies
   seed.js                            # Seed de /config/tarifas y /config/app
 
 functions/test/
   setup.js
-  cotizacion.test.js                 # 13 tests
-  confirmar_viaje.test.js            # 21 tests
-  onboarding.test.js                 # 8 tests
+  cotizacion.test.js                 # 11 tests
+  confirmar_viaje.test.js            # 31 tests
+  aceptar_viaje.test.js              # 31 tests
+  viaje_lifecycle.test.js            # 30 tests
+  validar_tarjeta_verde.test.js      # 22 tests
+  onboarding.test.js                 # 18 tests
 
 test/
   widget_test.dart                   # 6 tests unitarios sobre FretixUserRole
+  role_routing_test.dart             # 12 tests sobre lógica de rutas y roles
+  subir_tarjeta_verde_test.dart      # 21 tests sobre payloads y validación de vehículos
+  dashboard_stats_test.dart          # 8 tests de cálculo de ganancias netas y métricas
 ```
 
 ### Guards de ruta en `app_router.dart`
@@ -159,10 +185,8 @@ test/
 | Ruta | Guard | Mecanismo |
 |---|---|---|
 | `/admin/tarifas` | `_AdminGuard` | `getIdTokenResult()` → custom claim `role == 'admin'` |
-| `/home/chofer` | `_ChoferGuard` | Lectura Firestore `/users/{uid}.onboardingRole` |
+| `/home/chofer` | `_ChoferGuard` | Lectura Firestore `/users/{uid}.onboardingRole` (Stream reactivo) |
 | `/home/cliente` | Sin guard | Pendiente |
-
-`_ChoferGuard` usa Firestore porque `onboarding.js` no llama `setCustomUserClaims()` para roles regulares — sin custom claim en JWT.
 
 ---
 
@@ -171,19 +195,18 @@ test/
 ### `/users/{uid}`
 
 ```
-onboardingRole: string   ← campo real (snake_case, escrito por onboarding.js)
+onboardingRole: string   ← snake_case ('cliente_particular', 'cliente_empresa_maestro', 'chofer_independiente', 'empresa_transporte_maestro')
 displayName:   string
 phone:         string
 email:         string?
-companyId:     string?   ← solo para roles empresa (cliente_empresa_maestro, empresa_transporte_maestro)
+companyId:     string?   ← solo para roles empresa
 roles:         string[]  ← array interno (ej: ['driver'], ['customer'])
 isActive:      bool
 isVerified:    bool
 createdAt:     timestamp
-disponibleParaViajes: bool  ← solo para choferes, conectado al toggle en HomeChoferScreen
+disponibleParaViajes: bool  ← solo choferes, conectado al toggle en HomeChoferScreen
+fcmToken:      string?   ← token de mensajería push
 ```
-
-**Nota:** el campo es `onboardingRole`, no `role`. `cotizacion_screen.dart`, `_ChoferGuard`, y `otp_screen.dart` (verificar) leen `onboardingRole`.
 
 ### `/companies/{companyId}`
 
@@ -210,19 +233,115 @@ role:      'owner' | 'maestro'
 joinedAt:  timestamp
 ```
 
+### `/vehiculos/{vehiculoId}`
+
+Colección creada por choferes para validación de capacidad de transporte:
+
+```
+choferUid:               string (uid)
+companyId:               string?
+categoriaVehiculo:       'utilitario' | 'pickup' | 'camion_liviano' | 'camion_frio' | 'camion_mediano' | 'camion_mudanza'
+capacidadMaxKg:          number | null  ← calculado como (pbt - tara) cuando está validado
+estadoValidacion:        'pendiente_ocr' | 'pendiente_revision' | 'validado' | 'pendiente_subsanacion'
+tarjetaVerdeStoragePath: string  ← 'tarjetas_verde/{uid}/{timestamp}.jpg'
+pbtExtraido:             number | null
+taraExtraida:            number | null
+validadoEn:              timestamp | null
+validadoPor:             string | null  ← null si OCR automático, uid de admin si manual
+createdAt:               timestamp
+```
+
 ### `/viajes/{viajeId}`
 
 ```
-uid, companyId?, categoria, origen{lat,lng,address}, destino{lat,lng,address},
-paradas[], ayudante, cotizacion{distanciaKm, duracionMin, subtotal, helperFee,
-comisionApp, total}, estado ('pendiente'), createdAt
+clienteUid:    string (uid)
+clientType:    'particular' | 'empresa'
+companyId:     string?
+estado:        'pending' | 'aceptado' | 'en_curso' | 'en_transito' | 'completado' | 'cancelado'
+pricingMethod: 'haversine_contingencia' | 'google_maps'
+categoria:     'mini' | 'plus' | 'max' | 'heavy'
+cargaKg:       number (entero positivo en kg)
+ayudante:      bool
+origen:        { lat: number, lng: number, address: string }
+destino:       { lat: number, lng: number, address: string }
+cotizacion: {
+  total:       number,
+  subtotal:    number | null,
+  comisionApp: number | null,
+  helperFee:   number,
+  distanciaKm: number,
+  duracionMin: number
+}
+createdAt:     timestamp
+
+// Campos desnormalizados y timestamps según ciclo de vida:
+choferUid:     string? (uid chofer asignado)
+choferData:    { displayName, photoURL, phone, categoriaVehiculo }?
+clienteData:   { displayName, phone }?
+aceptadoEn:    timestamp?
+iniciadoEn:    timestamp?
+cargadoEn:     timestamp?
+completadoEn:  timestamp?
+canceladoEn:   timestamp?
+canceladoPor:  string? (uid)
+canceladoPorRol: 'cliente' | 'chofer'?
 ```
 
-Estado inicial siempre `'pendiente'`. No hay sistema de matcheo — queda pendiente para siempre.
+### `/viajes/{viajeId}/tracking/{doc}` (Subcolección GPS en vivo)
+
+Documento único: `actual`
+
+```
+lat:           number (double)
+lng:           number (double)
+actualizadoEn: timestamp
+```
+
+- **Reglas de seguridad:**
+  - Escritura: únicamente el `choferUid` asignado a ese viaje.
+  - Lectura: únicamente `clienteUid` o `choferUid` del viaje (y admin).
 
 ### `/config/tarifas` y `/config/app`
 
-Solo legibles por admin (Firestore rule + `_AdminGuard`). Escritura solo vía Admin SDK.
+Solo legibles y escribibles por admin con custom claim (`_AdminGuard` y rules). Escritura operativa vía Admin SDK.
+
+---
+
+## Máquina de estados del viaje (`/viajes/{viajeId}`)
+
+> **Regla estricta:** El estado inicial del viaje es `'pending'` (en inglés). NO existe el estado `'pendiente'` ni `'quoting'` en el documento `/viajes`.
+
+```
+[ Cliente confirma viaje ]
+           │
+           ▼
+        pending ───────────────────────────────┐
+           │                                   │
+   (aceptarViajeFretix)                        │
+           ▼                                   │
+        aceptado ──────────────────────────────┤
+           │                                   │ (cancelarViajeFretix)
+   (iniciarViajeFretix)                        │ (desde pending: solo cliente)
+           ▼                                   │ (desde aceptado: cliente o chofer)
+        en_curso                               │
+           │                                   │
+  (confirmarCargaFretix)                       │
+           ▼                                   │
+      en_transito                              │
+           │                                   │
+  (finalizarViajeFretix)                       │
+           ▼                                   ▼
+      completado                           cancelado
+```
+
+| Estado | Quién transiciona | Función Cloud / Mecanismo | Validación clave |
+|---|---|---|---|
+| `pending` | Cliente | `confirmarViajeFretix` | Estado inicial. Valida crédito B2B (si aplica) y `cargaKg`. |
+| `aceptado` | Chofer | `aceptarViajeFretix` (transacción) | Chofer disponible, con vehículo `validado`, `capacidadMaxKg >= cargaKg`, sin viajes activos simultáneos. |
+| `en_curso` | Chofer | `iniciarViajeFretix` | Chofer en camino al origen. Inicia tracking GPS cada 15s. |
+| `en_transito` | Chofer | `confirmarCargaFretix` | Mercadería cargada en origen. En ruta hacia destino con GPS. |
+| `completado` | Chofer | `finalizarViajeFretix` | Carga entregada en destino. Detiene tracking GPS. |
+| `cancelado` | Cliente o Chofer | `cancelarViajeFretix` | Permitido únicamente desde `pending` (solo cliente) o `aceptado` (cliente o chofer). |
 
 ---
 
@@ -235,42 +354,48 @@ comisionApp = subtotal × 0.15                 ← NO incluye helperFee
 total       = subtotal + comisionApp + helperFee
 ```
 
+Ganancia neta del chofer en dashboard:
+```
+gananciaNeta = cotizacion.total - cotizacion.comisionApp
+```
+
 Ruta: Google Maps Directions API (timeout 8s) → fallback Haversine × 1.35 (factor Mendoza).
 
 ---
 
-## Seguridad — estado actual (2026-08-06)
+## Seguridad — `firestore.rules` estado real
 
-### Gaps cerrados
-
-| Fix | Detalle | Commit |
-|---|---|---|
-| Fix 1 | `companyId` no modificable por cliente en `firestore.rules` | `9101939` |
-| Fix 2 | `/config` solo legible por admin (era legible por cualquier auth) | `9101939` |
-| Fix 3 | Guard en `/home/chofer` — antes cualquier usuario autenticado accedía | `eea3f96` + `e0eeadf` |
-| Fix 4 | Guard en `/admin/tarifas` | `12c7ba8` |
-
-### `firestore.rules` — estado actual
-
-- `/users/{userId}`: lectura = owner o admin; update = owner pero sin modificar `roles`, `isVerified`, `isActive`, `companyId`; create/delete = false
-- `/config/{configId}`: lectura y escritura = solo admin
-- `/viajes/{viajeId}`: create solo con `estado == 'quoting'`; update/delete = false (solo Admin SDK)
-- Resto de colecciones: escritura solo Cloud Functions (Admin SDK bypasea reglas)
+- `/users/{userId}`: lectura = owner o admin; update = owner pero sin modificar `roles`, `isVerified`, `isActive`, `companyId`; create/delete = false.
+- `/companies/{companyId}`: lectura = miembro o admin; escritura = false (Admin SDK).
+- `/company_members/{membershipId}`: lectura = owner o admin; escritura = false.
+- `/vehiculos/{vehiculoId}`:
+  - create = chofer autenticado (`request.resource.data.choferUid == request.auth.uid`).
+  - read = chofer dueño (`choferUid == uid`) o admin.
+  - update = chofer dueño (subsanación) o admin (validación manual).
+  - delete = false.
+- `/viajes/{viajeId}`:
+  - create = false (solo Cloud Functions vía Admin SDK).
+  - read = choferes autenticados si `estado == 'pending'` (para matcheo), clienteUid, choferUid asignado, o admin.
+  - update/delete = false (transiciones de estado exclusivamente por Cloud Functions).
+- `/viajes/{viajeId}/tracking/{doc}`:
+  - read = clienteUid o choferUid del viaje padre.
+  - write = solo choferUid del viaje padre.
+- `/config/{configId}`: lectura y escritura = solo admin con custom claim.
 
 ---
 
 ## Validación de crédito B2B
 
 `_loadUserCreditContext()` en `cotizacion_screen.dart`:
-1. Lee `/users/{uid}.onboardingRole`
-2. Si es `'cliente_empresa_maestro'` → query `/company_members` por `userId` → obtiene `companyId`
-3. Lee `/companies/{companyId}.cuentaCorriente`
-4. Default-secure: cualquier null en el camino → `_clientType = null` → botón bloqueado
+1. Lee `/users/{uid}.onboardingRole`.
+2. Si es `'cliente_empresa_maestro'` → query `/company_members` por `userId` → obtiene `companyId`.
+3. Lee `/companies/{companyId}.cuentaCorriente`.
+4. Default-secure: cualquier null en el camino → `_clientType = null` → botón confirmar bloqueado.
 
 `puedeConfirmarPorCredito()`:
-- `habilitada = false` + `macroLimitAudit != null && > 0` → permite
-- `habilitada = true` → `|saldoActualARS| <= limiteCreditoARS` → permite
-- Cualquier null → bloquea
+- `habilitada = false` + `macroLimitAudit != null && > 0` → permite.
+- `habilitada = true` → `|saldoActualARS| <= limiteCreditoARS` → permite.
+- Cualquier null → bloquea.
 
 ---
 
@@ -281,62 +406,41 @@ Ruta: Google Maps Directions API (timeout 8s) → fallback Haversine × 1.35 (fa
 | `phone_input_screen.dart` | ✅ Completo |
 | `otp_screen.dart` | ✅ Completo |
 | `role_selection_screen.dart` | ✅ Completo |
-| `cotizacion_screen.dart` | ✅ Completo (cotización + confirmación + crédito B2B) |
-| `home_cliente_screen.dart` | ⚠️ Placeholder — grid estático, sin cotizador accesible |
-| `home_chofer_screen.dart` | ✅ Matcheo real — toggle disponibilidad + StreamBuilder viajes pending + banner subsanación Tarjeta Verde; "Resumen del día" e "Historial" estáticos |
-| `admin_tarifas_screen.dart` | ✅ Solo lectura — StreamBuilder de /config/tarifas |
-| `admin_validaciones_screen.dart` | ✅ Nuevo — StreamBuilder de /vehiculos pending_revision, validación/subsanación manual |
-| `buscando_chofer_screen.dart` | ✅ StreamBuilder real — muestra estado pending (spinner) o aceptado (choferData desnormalizado) |
+| `cotizacion_screen.dart` | ✅ Completo (cotización + confirmación + crédito B2B + input explícito `cargaKg`) |
+| `home_cliente_screen.dart` | ⚠️ Placeholder — grid estático |
+| `home_chofer_screen.dart` | ✅ Matcheo real — toggle disponibilidad, StreamBuilder viajes `pending`, banner subsanación Tarjeta Verde, y stats del día reales calculados con ganancias netas |
+| `viaje_activo_screen.dart` | ✅ Completo — seguimiento GPS en vivo (15s), polilínea, ETA dinámico, transiciones `iniciar`, `confirmar carga`, `finalizar` |
+| `admin_tarifas_screen.dart` | ✅ Solo lectura — StreamBuilder de `/config/tarifas` |
+| `admin_validaciones_screen.dart` | ✅ Completo — StreamBuilder de `/vehiculos` `pendiente_revision`, validación/subsanación manual |
+| `buscando_chofer_screen.dart` | ✅ StreamBuilder real — estado `pending` (spinner) o `aceptado` (datos de chofer desnormalizados) |
+| `subir_tarjeta_verde_screen.dart`| ✅ Completo — subida a Storage + registro de doc en `/vehiculos` |
 
 ---
 
-## Sistema de matcheo — implementado (rama feature-validacion-vehiculo-20260904)
+## Sistema de matcheo y capacidad de vehículos
 
-### Flujo completo activo
+### Taxonomías coexistentes
 
-1. Cliente cotiza y confirma → `confirmarViajeFretix` crea `/viajes/{id}` con `estado: 'pending'`
-2. Chofer ve viajes en `HomeChoferScreen` (StreamBuilder filtra `estado=='pending'` + `categoria`)
-3. Chofer acepta → `aceptarViajeFretix` (transacción) → `estado: 'aceptado'`
-4. Cliente ve en `BuscandoChoferScreen` (StreamBuilder en `/viajes/{id}`) → muestra `_ChoferAsignadoView`
-
-### Categorías de vehículo — DOS taxonomías coexisten
-
-| Campo | Dónde vive | Valores | Estado |
+| Campo | Dónde vive | Valores | Rol |
 |---|---|---|---|
-| `categoriaVehiculo` en `/users/{uid}` | Legacy (onboarding) | `mini\|plus\|max\|heavy` | **Etiqueta visual solamente** |
-| `categoriaVehiculo` en `/vehiculos/{id}` | Nuevo módulo | `utilitario\|pickup\|camion_liviano\|camion_frio\|camion_mediano\|camion_mudanza` | **Etiqueta del vehículo real** |
-| `capacidadMaxKg` en `/vehiculos/{id}` | Nuevo módulo | número (kg) | **Fuente real de matcheo** |
+| `categoriaVehiculo` en `/users/{uid}` | Legacy (onboarding) | `mini\|plus\|max\|heavy` | Etiqueta visual informativa |
+| `categoriaVehiculo` en `/vehiculos/{id}` | Módulo vehículos | `utilitario\|pickup\|camion_liviano\|camion_frio\|camion_mediano\|camion_mudanza` | Tipo de unidad real |
+| `capacidadMaxKg` en `/vehiculos/{id}` | Módulo vehículos | número (kg) | **Fuente real de validación de matcheo** |
+| `cargaKg` en `/viajes/{id}` | Cotizador cliente | número (kg) | **Peso real declarado por el cliente** |
 
-**La comparación de matcheo usa `capacidadMaxKg`, no las etiquetas de categoría.**
+### Regla de aceptación (`aceptarViajeFretix`)
 
-### Puente temporal — `UMBRAL_KG_POR_CATEGORIA`
+1. **Opción A (Activa en viajes nuevos):** Compara `viaje.cargaKg <= chofer.capacidadMaxKg`.
+2. **Fallback legado:** Si el viaje no tiene `cargaKg` (viajes viejos), usa `UMBRAL_KG_POR_CATEGORIA[viaje.categoria]`.
 
-Mientras el cotizador no capture `cargaKg` explícito, `aceptarViajeFretix` usa:
+### Validación de Tarjeta Verde — Prerequisito obligatorio
 
-```javascript
-const UMBRAL_KG_POR_CATEGORIA = {
-  mini:  500,   // utilitario minKg
-  plus:  800,   // pickup minKg
-  max:   1400,  // camion_liviano minKg
-  heavy: 4000,  // camion_mediano minKg
-};
-```
+Un chofer sin vehículo con `estadoValidacion == 'validado'` en `/vehiculos/` es bloqueado tanto en la UI de `HomeChoferScreen` como en el backend en `aceptarViajeFretix`.
 
-Decisión pendiente **DP-1**: migrar a `cargaKg` explícito en el viaje (Opción A). No de este módulo.
-
-### Validación de Tarjeta Verde — prerequisito para matcheo
-
-Un chofer **sin vehículo con `estadoValidacion == 'validado'`** en `/vehiculos/` es bloqueado por:
-- `aceptarViajeFretix`: rechaza antes de la transacción
-- `HomeChoferScreen._ViajesDisponiblesSection`: muestra empty state "en validación"
-
-Estados del vehículo: `pendiente_ocr → pendiente_revision → validado` (Capa 1 = OCR)  
-o `pendiente_revision → pendiente_subsanacion → pendiente_ocr → validado` (Capa 2 = operador, Capa 3 = resubida)
-
-### Limitación conocida — sin techo de capacidad
-
-No hay cota superior en el matcheo. Un camion_mediano puede tomar un viaje `mini`.
-Documentado en `VALIDACION_LOG.md § Limitación conocida`. Pendiente Tarea futura "matcheo por mejor ajuste".
+Flujo de validación:
+`pendiente_ocr` ──► `validado` (Capa 1: OCR automático)  
+o `pendiente_ocr` ──► `pendiente_revision` (Capa 2: revisión manual por operador en Admin Panel)  
+o `pendiente_revision` ──► `pendiente_subsanacion` ──► re-subida en `SubirTarjetaVerdeScreen`.
 
 ---
 
@@ -344,53 +448,46 @@ Documentado en `VALIDACION_LOG.md § Limitación conocida`. Pendiente Tarea futu
 
 ### Flutter
 
-```
-flutter test test/widget_test.dart
-00:00 +6: All tests passed!
+```bash
+flutter test
+# +47: All tests passed!
 ```
 
-6 tests sobre `FretixUserRole`.
+- `test/widget_test.dart`: 6 tests sobre `FretixUserRole`.
+- `test/role_routing_test.dart`: 12 tests sobre lógica de navegación por roles.
+- `test/subir_tarjeta_verde_test.dart`: 21 tests sobre payloads de `/vehiculos`.
+- `test/dashboard_stats_test.dart`: 8 tests sobre cálculo de ganancias netas y métricas.
+**Total: 47 tests unitarios en Flutter, todos pasando.**
 
 ### Cloud Functions (Jest)
 
-```
-Test Suites: 5 passed, 5 total
-Tests:       89 passed, 89 total
+```bash
+cd functions && npm test
+# Test Suites: 6 passed, 6 total
+# Tests:       143 passed, 143 total
 ```
 
-Requiere emuladores corriendo (`firebase emulators:start --only firestore,auth`).
+143 tests en 6 suites: `aceptar_viaje.test.js` (31), `confirmar_viaje.test.js` (31), `cotizacion.test.js` (11), `onboarding.test.js` (18), `validar_tarjeta_verde.test.js` (22), `viaje_lifecycle.test.js` (30). Requieren emuladores corriendo.
 
 ### flutter analyze
 
 ```
-40 issues found — todos info, 0 errors, 0 warnings
+20 issues found — todos info (deprecaciones menores de Material / const / estilo), 0 errors, 0 warnings.
 ```
-
-Los 40 son deprecaciones de API pre-existentes en otros archivos. Ninguno en `app_router.dart`.
 
 ---
 
 ## Deuda técnica documentada
 
-| Issue | Archivo | Prioridad |
-|---|---|---|
-| `dart:html` stopgap | `search_location_screen.dart` | Media — no bloquea |
-| `withOpacity` deprecated | varios | Baja |
-| `textMuted` falla WCAG AA | `fretix_colors.dart` | Media (intencional como decorativo) |
-| Major version bumps Firebase | `pubspec.yaml` | Alta — requiere sesión dedicada |
-| `/home/cliente` sin guard de rol | `app_router.dart` | Media |
-
----
-
-## Decisiones pendientes (CPO)
-
-1. **Migración `dart:js_interop`** — `search_location_screen.dart`. Stopgap activo, no bloquea.
-2. **Pantallas de edición Admin Panel** — `/admin/tarifas/edit`. Requieren Cloud Function `actualizarTarifaFretix` + `audit_log`. No implementar sin aprobación.
-3. **`textMuted` WCAG AA** — ¿intencional como decorativo o debe cambiarse?
-4. **Major version bumps Firebase** — firebase_core 3→4, firebase_auth 5→6, cloud_firestore 5→6. Sesión dedicada con prueba end-to-end.
-5. **DP-1: `cargaKg` explícito en el viaje** — el cotizador actualmente no captura el peso de la carga. `aceptarViajeFretix` usa `UMBRAL_KG_POR_CATEGORIA` como puente. Migración a Opción A (campo explícito) es decisión pendiente del CPO.
-6. **Matcheo por mejor ajuste** — actualmente sin techo de capacidad. Un camion_mediano puede tomar viaje mini. Pendiente Tarea futura de optimización.
-7. **VAPID key web FCM** — placeholder `'BFretixVapidKeyPlaceholder'` en `auth_service.dart`. Reemplazar con la key real de Firebase Console → Project Settings → Cloud Messaging.
+| Issue | Archivo | Prioridad | Estado |
+|---|---|---|---|
+| `dart:html` stopgap | `search_location_screen.dart` | Media | Pendiente migración a `package:web` |
+| `withOpacity` deprecated | Varios archivos | Resuelto | ✅ Migrado a `.withValues(alpha:)` |
+| `setMapStyle` deprecated | Mapas en Flutter | Resuelto | ✅ Migrado a `GoogleMap.style` |
+| `textMuted` falla WCAG AA | `fretix_colors.dart` | Media | Intencional como decorativo |
+| Major version bumps Firebase | `pubspec.yaml` | Alta | Requiere sesión dedicada con pruebas e2e |
+| `/home/cliente` sin guard de rol | `app_router.dart` | Media | Pendiente |
+| Dispatcher FCM en segundo plano | Cloud Functions | Media | Notificaciones pendientes se graban en Firestore pero falta worker FCM |
 
 ---
 
@@ -429,14 +526,24 @@ git log --oneline -10
 
 ## Archivos de documentación en el repo
 
-| Archivo | Contenido |
-|---|---|
-| `README.md` | Setup local completo |
-| `OVERNIGHT_LOG.md` | Log detallado de la sesión nocturna 2026-08-03/04 |
-| `BITACORA.md` | Historial de decisiones de arquitectura (nota: tiene información desactualizada sobre roles y branch) |
-| `FRETIX_Arquitectura_Firestore.md` | Esquema de colecciones y reglas |
-| `FRETIX_Modulo2_Auth_Onboarding.md` | Flujo OTP + onboarding |
-| `FRETIX_Modulo3_Tarifas_Mapas.md` | Algoritmo de tarifa y cotización |
-| `FRETIX_Modulo4_Flujo_Matcheo.md` | Matching chofer-viaje |
-| `FRETIX_Modulo5_UI_Flutter.md` | Pantallas y navegación |
-| `FRETIX_Modulo6_Web_Cierre.md` | Deploy web |
+| Archivo | Estado | Contenido |
+|---|---|---|
+| `CONTEXT_FOR_AI.md` | **ACTUALIZADO (Vigente)** | Fuente de verdad y contexto maestro para IA |
+| `DEUDA_TECNICA_LOG.md` | **ACTUALIZADO (Vigente)** | Log activo de deuda técnica, mitigaciones y auditorías |
+| `CARGAKG_DESIGN_LOG.md` | **ACTUALIZADO (Vigente)** | Diseño e implementación de `cargaKg` explícito |
+| `KYC_DESIGN_LOG.md` | **ACTUALIZADO (Vigente)** | Diseño de verificación de identidad chofer |
+| `TRACKING_GPS_LOG.md` | **ACTUALIZADO (Vigente)** | Diseño e implementación de tracking GPS en vivo |
+| `VIAJE_EN_CURSO_LOG.md`| **ACTUALIZADO (Vigente)** | Ciclo de vida y pantalla de viaje activo |
+| `VALIDACION_LOG.md` | **ACTUALIZADO (Vigente)** | Módulo de validación de Tarjeta Verde y `/vehiculos` |
+| `MATCHEO_LOG.md` | **ACTUALIZADO (Vigente)** | Lógica y auditoría del sistema de matcheo |
+| `REBRAND_LOG.md` | **ACTUALIZADO (Vigente)** | Transición visual a Azul Acero y Plateado |
+| `REPORTE_CEO_CTO_04092026.md` | **ACTUALIZADO (Vigente)** | Reporte de arquitectura técnica 2026-09-04 |
+| `README.md` | **ACTUALIZADO (Vigente)** | Setup local y guía de inicio rápido |
+| `OVERNIGHT_LOG.md` | **HISTÓRICO** | Log de sesión nocturna 2026-08-03/04 |
+| `BITACORA.md` | **HISTÓRICO (Parcialmente desactualizado)** | Decisiones de arquitectura tempranas |
+| `FRETIX_Modulo2_Auth_Onboarding.md` | ⚠️ **DESACTUALIZADO** | Reemplazado por código real y `CONTEXT_FOR_AI.md` |
+| `FRETIX_Modulo3_Tarifas_Mapas.md` | ⚠️ **DESACTUALIZADO** | Reemplazado por código real y `CONTEXT_FOR_AI.md` |
+| `FRETIX_Modulo4_Flujo_Matcheo.md` | ⚠️ **DESACTUALIZADO** | Reemplazado por `MATCHEO_LOG.md` y `CONTEXT_FOR_AI.md` |
+| `FRETIX_Modulo5_UI_Flutter.md` | ⚠️ **DESACTUALIZADO** | Reemplazado por código real y `CONTEXT_FOR_AI.md` |
+| `FRETIX_Modulo6_Web_Cierre.md` | ⚠️ **DESACTUALIZADO** | Reemplazado por código real y `CONTEXT_FOR_AI.md` |
+| `FRETIX_Arquitectura_Firestore.md` | ⚠️ **DESACTUALIZADO** | Esquema legacy desfasado; ver `firestore.rules` y `CONTEXT_FOR_AI.md` |
